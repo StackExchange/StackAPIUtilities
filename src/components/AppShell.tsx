@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type AppPanel = "report" | "credentials" | "uploads" | "datasets";
+export type AppPanel = "report" | "credentials" | "uploads" | "datasets" | "write-tools";
 
 interface AppShellSummary {
   credentialsSaved: boolean;
@@ -20,6 +20,7 @@ const panelLabels: Record<AppPanel, string> = {
   credentials: "Credentials",
   uploads: "Uploads",
   datasets: "Datasets",
+  "write-tools": "Write Tools",
 };
 
 export function AppShell({ activePanel, onPanelChange, sidebar, children, summary }: AppShellProps) {

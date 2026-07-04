@@ -9,6 +9,7 @@ import { ReportWorkspace } from "./components/ReportWorkspace";
 import { RunStatus } from "./components/RunStatus";
 import { SessionOverview } from "./components/SessionOverview";
 import { UploadsPanel, type ImportedUploadResult } from "./components/UploadsPanel";
+import { UserGroupSyncPanel } from "./components/UserGroupSyncPanel";
 import { validateCredentialsForReport } from "./credentials/credentialRules";
 import { DEFAULT_REPORT_RUN_SCOPE } from "./domain/reportScope";
 import { reportRegistry } from "./domain/reportRegistry";
@@ -182,6 +183,9 @@ export function App() {
           datasets={datasets}
           onRemoveDataset={(datasetId) => dispatch({ type: "dataset/remove", datasetId })}
         />
+      )}
+      {activePanel === "write-tools" && (
+        <UserGroupSyncPanel credentials={state.credentials} />
       )}
       {activePanel === "report" && (
         <ReportWorkspace
