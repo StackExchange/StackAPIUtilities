@@ -18,14 +18,22 @@ export function ReportWorkspace({ reportId, records, onRun }: ReportWorkspacePro
   return (
     <section className="workspace-panel" aria-labelledby="selected-report-heading">
       <div className="workspace-header">
-        <p className="fs-caption fc-light mb4">{report.sourceRepo}</p>
-        <h2 className="fs-headline2 m0" id="selected-report-heading">
-          {report.title}
-        </h2>
+        <div>
+          <p className="workspace-kicker">{report.sourceRepo}</p>
+          <h2 className="workspace-heading" id="selected-report-heading">
+            {report.title}
+          </h2>
+        </div>
+        <div className="workspace-stack-mark" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
       </div>
-      <p className="fs-body2 workspace-copy">{report.description}</p>
-      <div className="s-notice s-notice__info mt12" role="note">
-        <p className="m0">Session-only credentials required before live API runs.</p>
+      <p className="workspace-copy">{report.description}</p>
+      <div className="workspace-readiness" role="note">
+        <span className="readiness-dot" aria-hidden="true" />
+        <p className="m0">Ready for session credentials. Uploads work now; live API runs come next.</p>
       </div>
       <RunControls reportId={reportId} onRun={onRun} />
       <div className="s-navigation s-navigation__muted report-tabs" role="tablist">

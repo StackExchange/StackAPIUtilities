@@ -24,9 +24,8 @@ export function ReportCatalog({ selectedReportId, onSelect }: ReportCatalogProps
             key={report.id}
           >
             <span className="report-list-title">{report.title}</span>
-            <span className="report-list-source" aria-hidden="true">
-              {report.sourceRepo}
-            </span>
+            <span className="report-list-source">{report.sourceRepo}</span>
+            <span className="report-list-meta">Browser-ready read-only report</span>
           </button>
         ))}
       </div>

@@ -15,7 +15,7 @@ describe("ReportWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "Tag Report" })).toBeInTheDocument();
     expect(
-      screen.getByText("Session-only credentials required before live API runs."),
+      screen.getByText("Ready for session credentials. Uploads work now; live API runs come next."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run Tag Report" })).toBeInTheDocument();
     expect(screen.getByText("Page Views")).toBeInTheDocument();
