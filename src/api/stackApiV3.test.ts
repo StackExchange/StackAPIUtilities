@@ -80,4 +80,88 @@ describe("StackApiV3Client", () => {
 
     await expect(client.getPagedItems("/communities")).resolves.toEqual([{ id: "community" }]);
   });
+
+  it("retrieves a user by email", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 42, email: "ada@example.com", name: "Ada Lovelace" }), { status: 200 }),
+    );
+    const client = new StackApiV3Client({
+      apiV3Url: "https://demo.stackenterprise.co/api/v3",
+      token: "token",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.getUserByEmail("ada+vrm@example.com")).resolves.toEqual({
+      id: 42,
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    expect(fetchMock.mock.calls[0][0].toString()).toBe(
+      "https://demo.stackenterprise.co/api/v3/users/by-email/ada%2Bvrm%40example.com",
+    );
+  });
+
+  it("returns null when user lookup by email is not found", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("not found", { status: 404 }));
+    const client = new StackApiV3Client({
+      apiV3Url: "https://demo.stackenterprise.co/api/v3",
+      token: "token",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.getUserByEmail("missing@example.com")).resolves.toBeNull();
+  });
+
+  it("creates user groups and adds members with write access bearer auth", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 7, name: "Ada Lovelace VRM", users: [] }), { status: 201 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 7, name: "Ada Lovelace VRM", users: [{ id: 1 }] }), { status: 200 }),
+      );
+    const client = new StackApiV3Client({
+      apiV3Url: "https://demo.stackenterprise.co/api/v3",
+      token: "token",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.createUserGroup({ name: "Ada Lovelace VRM", userIds: [1, 2] })).resolves.toEqual(
+      expect.objectContaining({ id: 7, name: "Ada Lovelace VRM" }),
+    );
+    await expect(client.addUserGroupMembers(7, [3])).resolves.toEqual(
+      expect.objectContaining({ id: 7, name: "Ada Lovelace VRM" }),
+    );
+    expect(fetchMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer token", "Content-Type": "application/json" }),
+        body: JSON.stringify({ name: "Ada Lovelace VRM", userIds: [1, 2] }),
+      }),
+    );
+    expect(fetchMock.mock.calls[1][0].toString()).toBe(
+      "https://demo.stackenterprise.co/api/v3/user-groups/7/members",
+    );
+    expect(fetchMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify([3]),
+      }),
+    );
+  });
+
+  it("removes a group member with DELETE", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const client = new StackApiV3Client({
+      apiV3Url: "https://demo.stackenterprise.co/api/v3",
+      token: "token",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.removeUserGroupMember(7, 3)).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[0][0].toString()).toBe(
+      "https://demo.stackenterprise.co/api/v3/user-groups/7/members/3",
+    );
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: "DELETE" }));
+  });
 });
