@@ -51,6 +51,17 @@ describe("AppShell", () => {
     expect(screen.queryByRole("heading", { name: "Tag Report" })).not.toBeInTheDocument();
   });
 
+  it("opens the write tools panel", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Write Tools" }));
+
+    expect(screen.getByRole("heading", { name: "User Group Sync" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Upload user export CSV")).toBeInTheDocument();
+  });
+
   it("loads an uploaded report output into the selected dashboard", async () => {
     const user = userEvent.setup();
 
