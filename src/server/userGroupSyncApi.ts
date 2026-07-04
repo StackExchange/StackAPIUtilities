@@ -4,6 +4,7 @@ import type { SessionCredentials } from "../domain/types";
 import {
   applyUserGroupSync,
   previewUserGroupSync,
+  UserGroupSyncInputError,
   type UserGroupSyncApplyResult,
   type UserGroupSyncClient,
 } from "../writeTools/userGroupSyncRunner";
@@ -86,21 +87,9 @@ export async function handleUserGroupSyncRequest(
     const errorMessage = toErrorMessage(error);
     return jsonResponse(
       { ok: false, error: errorMessage },
-      isUserGroupSyncInputErrorMessage(errorMessage) ? 400 : 500,
+      error instanceof UserGroupSyncInputError ? 400 : 500,
     );
   }
-}
-
-const USER_GROUP_SYNC_INPUT_ERROR_PREFIXES = [
-  "User export CSV is missing required column(s):",
-  "Too few fields:",
-  "Too many fields:",
-  "Quoted field unterminated",
-  "Unable to auto-detect delimiting character;",
-] as const;
-
-function isUserGroupSyncInputErrorMessage(message: string): boolean {
-  return USER_GROUP_SYNC_INPUT_ERROR_PREFIXES.some((prefix) => message.startsWith(prefix));
 }
 
 function toErrorMessage(error: unknown): string {
