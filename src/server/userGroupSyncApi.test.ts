@@ -20,7 +20,7 @@ describe("handleUserGroupSyncRequest", () => {
       getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
       getUserGroups: vi.fn().mockResolvedValue([]),
     });
-    const createClientDependency = vi.fn(() => client);
+    const createClientDependency = vi.fn((_credentials: SessionCredentials) => client);
 
     const response = await handleUserGroupSyncRequest(
       {
@@ -170,7 +170,7 @@ describe("handleUserGroupSyncRequest", () => {
       getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
       getUserGroups: vi.fn().mockResolvedValue([]),
     });
-    const createClientDependency = vi.fn(() => client);
+    const createClientDependency = vi.fn((_credentials: SessionCredentials) => client);
     const stackEnterpriseCredentials: SessionCredentials = {
       ...credentials,
       baseUrl: "https://stackenterprise.co",
@@ -260,6 +260,86 @@ describe("handleUserGroupSyncRequest", () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: "Enterprise user group sync requires an access token with write_access.",
+    });
+  });
+
+  it("treats whitespace-only access tokens as missing", async () => {
+    const createClient = vi.fn();
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: { ...credentials, accessToken: "   " },
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Enterprise user group sync requires an access token with write_access.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a PAT when access token is blank", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+    });
+    const createClientDependency = vi.fn((_credentials: SessionCredentials) => client);
+    const requestCredentials: SessionCredentials = {
+      ...credentials,
+      accessToken: "",
+      pat: "pat-token",
+    };
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: requestCredentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: createClientDependency },
+    );
+
+    expect(response.status).toBe(200);
+    const [normalizedCredentials] = createClientDependency.mock.calls[0];
+    expect(normalizedCredentials).toEqual(expect.objectContaining({ pat: "pat-token" }));
+    expect(normalizedCredentials.accessToken).toBeUndefined();
+  });
+
+  it("trims access tokens before creating the client", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+    });
+    const createClientDependency = vi.fn((_credentials: SessionCredentials) => client);
+    const requestCredentials: SessionCredentials = {
+      ...credentials,
+      accessToken: "  token  ",
+    };
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: requestCredentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: createClientDependency },
+    );
+
+    expect(response.status).toBe(200);
+    expect(createClientDependency).toHaveBeenCalledWith({
+      ...requestCredentials,
+      accessToken: "token",
     });
   });
 
