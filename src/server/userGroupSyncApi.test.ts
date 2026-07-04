@@ -247,6 +247,32 @@ describe("handleUserGroupSyncRequest", () => {
     });
   });
 
+  it("returns a 400 response for invalid user export CSV", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn(),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+    });
+    const createClientDependency = vi.fn((_credentials: SessionCredentials) => client);
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials,
+        csvText: "Senior Manager,Email\nAda Lovelace,ada@example.com",
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: createClientDependency },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        "User export CSV is missing required column(s): Director, User Group Member, First Name, Last Name, Colleague ID, Job Title",
+    });
+  });
+
   it("requires an Enterprise access token or PAT", async () => {
     const response = await handleUserGroupSyncRequest({
       action: "preview",
