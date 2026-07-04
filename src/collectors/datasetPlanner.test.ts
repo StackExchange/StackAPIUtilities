@@ -70,10 +70,48 @@ describe("collectDataset", () => {
     expect(clients.v2.getPagedItems).toHaveBeenCalledWith("/comments", { pagesize: "100" });
   });
 
+  it("collects tag SME records from previously collected tags", async () => {
+    const clients = createMockClients();
+
+    await expect(
+      collectDataset("tagSmes", clients, {
+        collectedDatasets: {
+          tags: [{ name: "python" }, { tagName: "c#" }],
+        },
+      }),
+    ).resolves.toEqual([
+      { tagName: "python", id: 1 },
+      { tagName: "c#", id: 1 },
+    ]);
+
+    expect(clients.v2.getPagedItems).toHaveBeenCalledWith("/tags/python/top-answerers/all_time", {
+      pagesize: "100",
+    });
+    expect(clients.v2.getPagedItems).toHaveBeenCalledWith("/tags/c%23/top-answerers/all_time", {
+      pagesize: "100",
+    });
+  });
+
+  it("collects reputation history from previously collected users", async () => {
+    const clients = createMockClients();
+
+    await expect(
+      collectDataset("reputationHistory", clients, {
+        collectedDatasets: {
+          users: [{ user_id: 1 }, { userId: 2 }],
+        },
+      }),
+    ).resolves.toEqual([{ id: 1 }]);
+
+    expect(clients.v2.getPagedItems).toHaveBeenCalledWith("/users/1;2/reputation-history", {
+      pagesize: "100",
+    });
+  });
+
   it("throws an explicit error for unsupported live datasets", async () => {
-    await expect(collectDataset("tagSmes", createMockClients())).rejects.toThrow(UnsupportedLiveDatasetError);
-    await expect(collectDataset("tagSmes", createMockClients())).rejects.toThrow(
-      "Dataset tagSmes is not mapped for live API collection yet.",
+    await expect(collectDataset("dataExport", createMockClients())).rejects.toThrow(UnsupportedLiveDatasetError);
+    await expect(collectDataset("dataExport", createMockClients())).rejects.toThrow(
+      "Dataset dataExport is not mapped for live API collection yet.",
     );
   });
 });

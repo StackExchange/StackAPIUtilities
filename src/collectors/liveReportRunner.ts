@@ -59,10 +59,14 @@ export async function runLiveReport(
 
   const clients = createLiveCollectorClients(credentials, options);
   const datasets: LiveReportDataset[] = [];
+  const collectedDatasets: Partial<Record<DatasetName, Record<string, unknown>[]>> = {};
 
   for (const datasetName of plannedDatasets) {
-    const records = await collectDataset(datasetName, clients);
-    datasets.push({ datasetName, records: toRecordList(records) });
+    const records = toRecordList(
+      await collectDataset(datasetName, clients, { collectedDatasets }),
+    );
+    collectedDatasets[datasetName] = records;
+    datasets.push({ datasetName, records });
   }
 
   datasets.push(...buildSyntheticDatasets(reportId, datasets));

@@ -124,15 +124,25 @@ describe("AppShell", () => {
     expect(screen.getByText("Ada")).toBeInTheDocument();
   });
 
-  it("does not call live APIs when a report still needs unsupported live datasets", async () => {
+  it("runs Tag Report through the server-backed live API route", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({
-        ok: false,
-        error:
-          "Tag Report needs live datasets that are not mapped for live API collection yet: tagSmes. Use Uploads for this report until those collectors are added.",
+        ok: true,
+        result: {
+          reportId: "tag-report",
+          reportTitle: "Tag Report",
+          datasets: [
+            { datasetName: "tags", records: [{ name: "python" }] },
+            { datasetName: "users", records: [{ user_id: 1 }] },
+            { datasetName: "questions", records: [{ question_id: 10 }] },
+            { datasetName: "articles", records: [{ article_id: 20 }] },
+            { datasetName: "tagSmes", records: [{ tagName: "python", user_id: 1 }] },
+          ],
+          messages: ["Collected tagSmes (1 record) for Tag Report."],
+        },
       }), {
-        status: 500,
+        status: 200,
       }),
     );
 
@@ -145,12 +155,10 @@ describe("AppShell", () => {
     await user.click(screen.getByRole("button", { name: "Reports" }));
     await user.click(screen.getByRole("button", { name: "Run Tag Report" }));
 
-    expect(
-      await screen.findByText(
-        "Tag Report needs live datasets that are not mapped for live API collection yet: tagSmes. Use Uploads for this report until those collectors are added.",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Live API run completed for Tag Report.")).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe("/api/reports/run");
+    expect(screen.getByText("5 datasets")).toBeInTheDocument();
+    expect(screen.getAllByText("tagSmes").length).toBeGreaterThanOrEqual(1);
   });
 
   it("saves credentials for the current browser session", async () => {

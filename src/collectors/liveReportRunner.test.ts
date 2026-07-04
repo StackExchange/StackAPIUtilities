@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionCredentials } from "../domain/types";
-import { UnsupportedLiveReportRunError, runLiveReport } from "./liveReportRunner";
+import { runLiveReport } from "./liveReportRunner";
 
 const basicCredentials: SessionCredentials = {
   instanceType: "basic-business",
@@ -34,18 +34,55 @@ describe("runLiveReport", () => {
     expect(fetchMock.mock.calls[0][0].toString()).toContain("team=example-team");
   });
 
-  it("stops before fetching when a report needs unsupported live datasets", async () => {
-    const fetchMock = vi.fn();
+  it("runs Tag Report by collecting tag SME records from tags", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ items: itemsForTagReportUrl(input.toString()), has_more: false }), {
+          status: 200,
+        }),
+      ),
+    );
 
-    await expect(
-      runLiveReport("tag-report", basicCredentials, { fetchFn: fetchMock }),
-    ).rejects.toMatchObject({
-      unsupportedDatasets: ["tagSmes"],
+    const result = await runLiveReport("tag-report", basicCredentials, {
+      fetchFn: fetchMock,
     });
-    await expect(
-      runLiveReport("tag-report", basicCredentials, { fetchFn: fetchMock }),
-    ).rejects.toThrow(UnsupportedLiveReportRunError);
-    expect(fetchMock).not.toHaveBeenCalled();
+
+    expect(result.datasets.map((dataset) => dataset.datasetName)).toEqual([
+      "tags",
+      "users",
+      "questions",
+      "articles",
+      "tagSmes",
+    ]);
+    expect(result.datasets.find((dataset) => dataset.datasetName === "tagSmes")?.records).toEqual([
+      { tagName: "python", user_id: 1, score: 12 },
+    ]);
+  });
+
+  it("runs API User Report by collecting reputation history from users", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ items: itemsForApiUserReportUrl(input.toString()), has_more: false, totalPages: 1 }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    const result = await runLiveReport("api-user-report", basicCredentials, {
+      fetchFn: fetchMock,
+    });
+
+    expect(result.datasets.map((dataset) => dataset.datasetName)).toEqual([
+      "users",
+      "questions",
+      "articles",
+      "tags",
+      "reputationHistory",
+      "communities",
+    ]);
+    expect(fetchMock.mock.calls.map((call) => call[0].toString())).toContain(
+      "https://api.stackoverflowteams.com/2.3/users/1/reputation-history?pagesize=100&page=1&team=example-team",
+    );
   });
 
   it("runs Data Export by collecting concrete API datasets", async () => {
@@ -125,4 +162,28 @@ function itemsForInteractionsUrl(url: string): Record<string, unknown>[] {
   }
 
   return [];
+}
+
+function itemsForTagReportUrl(url: string): Record<string, unknown>[] {
+  if (url.includes("/tags?")) {
+    return [{ name: "python" }];
+  }
+
+  if (url.includes("/top-answerers/")) {
+    return [{ user_id: 1, score: 12 }];
+  }
+
+  return [{ id: 1 }];
+}
+
+function itemsForApiUserReportUrl(url: string): Record<string, unknown>[] {
+  if (url.includes("/users?")) {
+    return [{ user_id: 1 }];
+  }
+
+  if (url.includes("/reputation-history")) {
+    return [{ user_id: 1, reputation_change: 5 }];
+  }
+
+  return [{ id: 1 }];
 }
