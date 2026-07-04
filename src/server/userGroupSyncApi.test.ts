@@ -338,6 +338,73 @@ describe("handleUserGroupSyncRequest", () => {
     expect(client.removeUserGroupMember).not.toHaveBeenCalled();
   });
 
+  it("applies the verified exact-sync preview without recomputing a different write plan", async () => {
+    const getUserGroups = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: 10,
+          name: "Ada Lovelace VRM",
+          users: [{ id: 1, name: "Grace Hopper" }],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 10,
+          name: "Ada Lovelace VRM",
+          users: [
+            { id: 1, name: "Grace Hopper" },
+            { id: 99, name: "Late Added Member" },
+          ],
+        },
+      ]);
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups,
+    });
+    const expectedPreview = {
+      syncMode: "exact-sync" as const,
+      groupNameTemplate: "{Senior Manager} VRM",
+      blockingErrors: [],
+      skippedRows: [],
+      groups: [
+        {
+          manager: "Ada Lovelace",
+          groupName: "Ada Lovelace VRM",
+          existingGroupId: 10,
+          createGroup: false,
+          desiredUserIds: [1],
+          addUserIds: [],
+          removeUserIds: [],
+        },
+      ],
+    };
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "apply",
+        credentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "exact-sync",
+        expectedPreview,
+      },
+      { createClient: () => client },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      result: expect.objectContaining({
+        operations: [],
+      }),
+    });
+    expect(client.getUserGroups).toHaveBeenCalledTimes(1);
+    expect(client.createUserGroup).not.toHaveBeenCalled();
+    expect(client.addUserGroupMembers).not.toHaveBeenCalled();
+    expect(client.removeUserGroupMember).not.toHaveBeenCalled();
+  });
+
   it("returns a 400 response for invalid request payloads", async () => {
     const response = await handleUserGroupSyncRequest({ action: "preview" });
 
