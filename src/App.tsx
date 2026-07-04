@@ -6,6 +6,7 @@ import { ReportWorkspace } from "./components/ReportWorkspace";
 import { RunStatus } from "./components/RunStatus";
 import { SessionOverview } from "./components/SessionOverview";
 import { UploadsPanel } from "./components/UploadsPanel";
+import { validateCredentialsForReport } from "./credentials/credentialRules";
 import { reportRegistry } from "./domain/reportRegistry";
 import { createInitialSessionState, sessionReducer } from "./domain/sessionStore";
 import type { ReportId, RunQueueItem } from "./domain/types";
@@ -22,12 +23,39 @@ export function App() {
 
   function queueSelectedReportRun() {
     const report = reportRegistry.find((candidate) => candidate.id === state.selectedReportId)!;
+    if (!state.credentials) {
+      setRunQueue([
+        {
+          id: `${state.selectedReportId}-missing-credentials`,
+          reportId: state.selectedReportId,
+          status: "queued",
+          message: `Add session credentials before running ${report.title}.`,
+        },
+      ]);
+      setActivePanel("credentials");
+      return;
+    }
+
+    const validation = validateCredentialsForReport(state.selectedReportId, state.credentials);
+    if (!validation.valid) {
+      setRunQueue(
+        validation.messages.map((message, index) => ({
+          id: `${state.selectedReportId}-credential-error-${index}`,
+          reportId: state.selectedReportId,
+          status: "failed",
+          message,
+        })),
+      );
+      setActivePanel("credentials");
+      return;
+    }
+
     setRunQueue([
       {
         id: `${state.selectedReportId}-preview-run`,
         reportId: state.selectedReportId,
         status: "queued",
-        message: `${report.title} queued for browser-only execution wiring.`,
+        message: `${report.title} has valid session credentials. Live API execution is not connected yet; use Uploads for existing CSV or JSON outputs.`,
       },
     ]);
   }
@@ -42,7 +70,13 @@ export function App() {
     >
       <SessionOverview state={state} />
       <RunStatus queue={runQueue} />
-      {activePanel === "credentials" && <CredentialsPanel />}
+      {activePanel === "credentials" && (
+        <CredentialsPanel
+          selectedReportId={state.selectedReportId}
+          credentials={state.credentials}
+          onSave={(credentials) => dispatch({ type: "credentials/set", credentials })}
+        />
+      )}
       {activePanel === "uploads" && <UploadsPanel />}
       {activePanel === "report" && (
         <ReportWorkspace

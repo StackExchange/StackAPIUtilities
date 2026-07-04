@@ -23,6 +23,11 @@ describe("AppShell", () => {
     expect(
       screen.getByText("Credentials are kept in memory for this browser session only."),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Instance URL")).toBeInTheDocument();
+    expect(screen.getByLabelText("API key")).toBeInTheDocument();
+    expect(screen.getByLabelText("Access token")).toBeInTheDocument();
+    expect(screen.getByLabelText("Personal access token")).toBeInTheDocument();
+    expect(screen.getByText("Tag Report credential notes")).toBeInTheDocument();
   });
 
   it("shows a distinct uploads placeholder", async () => {
@@ -47,7 +52,21 @@ describe("AppShell", () => {
     await user.click(screen.getByRole("button", { name: "Run Tag Report" }));
 
     expect(
-      screen.getByText("Tag Report queued for browser-only execution wiring."),
+      screen.getByText("Add session credentials before running Tag Report."),
     ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Session Credentials" })).toBeInTheDocument();
+  });
+
+  it("saves credentials for the current browser session", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Credentials" }));
+    await user.type(screen.getByLabelText("Instance URL"), "https://stackoverflowteams.com/c/demo");
+    await user.type(screen.getByLabelText("Access token"), "token");
+    await user.click(screen.getByRole("button", { name: "Save session credentials" }));
+
+    expect(screen.getByText("Credentials saved for this browser session.")).toBeInTheDocument();
   });
 });

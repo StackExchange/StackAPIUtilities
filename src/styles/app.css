@@ -133,7 +133,8 @@ body {
   color: var(--black-600);
 }
 
-.placeholder-notice {
+.placeholder-notice,
+.credential-notes {
   max-width: 720px;
   margin-top: 16px;
   padding: 12px 14px;
@@ -143,6 +144,13 @@ body {
   color: var(--black-700);
   font-size: 13px;
   line-height: 1.4;
+}
+
+.credentials-form {
+  display: grid;
+  max-width: 720px;
+  margin-top: 16px;
+  gap: 12px;
 }
 
 .session-overview {
