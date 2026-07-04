@@ -12,6 +12,25 @@ interface StackApiV3Page<T> {
   totalPages?: number;
 }
 
+export interface StackApiV3UserSummary {
+  id: number;
+  email?: string | null;
+  name?: string;
+}
+
+export interface StackApiV3UserGroup {
+  id: number;
+  name: string;
+  description?: string | null;
+  users?: StackApiV3UserSummary[];
+}
+
+interface CreateUserGroupInput {
+  name: string;
+  description?: string;
+  userIds: number[];
+}
+
 interface PagingOptions {
   maxPages?: number;
 }
@@ -44,10 +63,7 @@ export class StackApiV3Client {
     do {
       const url = this.buildUrl(path, { ...query, page: String(page) });
       const response = await this.fetchFn(url, {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          "Content-Type": "application/json",
-        },
+        headers: this.createJsonHeaders(),
       });
 
       const body = await readJsonResponse<StackApiV3Page<T>>(response, "Stack API v3");
@@ -61,6 +77,41 @@ export class StackApiV3Client {
     return items;
   }
 
+  async getUserByEmail(email: string): Promise<StackApiV3UserSummary | null> {
+    const response = await this.fetchFn(this.buildUrl(`/users/by-email/${encodeURIComponent(email)}`, {}), {
+      headers: this.createJsonHeaders(),
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    return readJsonResponse<StackApiV3UserSummary>(response, "Stack API v3");
+  }
+
+  async getUserGroups(): Promise<StackApiV3UserGroup[]> {
+    return this.getPagedItems<StackApiV3UserGroup>("/user-groups", { pageSize: "100" });
+  }
+
+  async createUserGroup(input: CreateUserGroupInput): Promise<StackApiV3UserGroup> {
+    return this.writeJson<StackApiV3UserGroup>("/user-groups", "POST", input);
+  }
+
+  async addUserGroupMembers(userGroupId: number, userIds: number[]): Promise<StackApiV3UserGroup> {
+    return this.writeJson<StackApiV3UserGroup>(`/user-groups/${userGroupId}/members`, "POST", userIds);
+  }
+
+  async removeUserGroupMember(userGroupId: number, userId: number): Promise<void> {
+    const response = await this.fetchFn(this.buildUrl(`/user-groups/${userGroupId}/members/${userId}`, {}), {
+      method: "DELETE",
+      headers: this.createJsonHeaders(),
+    });
+
+    if (!response.ok) {
+      await readJsonResponse<unknown>(response, "Stack API v3");
+    }
+  }
+
   private buildUrl(path: string, query: Record<string, string>): URL {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const url = new URL(`${this.apiV3Url}${normalizedPath}`);
@@ -70,6 +121,23 @@ export class StackApiV3Client {
     }
 
     return url;
+  }
+
+  private async writeJson<T>(path: string, method: "POST" | "PUT", body: unknown): Promise<T> {
+    const response = await this.fetchFn(this.buildUrl(path, {}), {
+      method,
+      headers: this.createJsonHeaders(),
+      body: JSON.stringify(body),
+    });
+
+    return readJsonResponse<T>(response, "Stack API v3");
+  }
+
+  private createJsonHeaders(): HeadersInit {
+    return {
+      Authorization: `Bearer ${this.token}`,
+      "Content-Type": "application/json",
+    };
   }
 
   private async notifyThrottle(headers: Headers): Promise<void> {
