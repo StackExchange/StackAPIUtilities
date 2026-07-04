@@ -33,7 +33,8 @@ export async function handleUserGroupSyncRequest(
     return jsonResponse({ ok: false, error: "User group sync request is invalid." }, 400);
   }
 
-  const normalizedInstance = normalizeRequestInstance(payload.credentials.baseUrl);
+  const normalizedCredentials = normalizeWriteCredentials(payload.credentials);
+  const normalizedInstance = normalizeRequestInstance(normalizedCredentials.baseUrl);
   if (normalizedInstance === null) {
     return jsonResponse(
       { ok: false, error: "Enterprise user group sync requires a valid instance URL." },
@@ -42,7 +43,7 @@ export async function handleUserGroupSyncRequest(
   }
 
   if (
-    payload.credentials.instanceType !== "enterprise" ||
+    normalizedCredentials.instanceType !== "enterprise" ||
     normalizedInstance.instanceType !== "enterprise"
   ) {
     return jsonResponse(
@@ -58,7 +59,7 @@ export async function handleUserGroupSyncRequest(
     );
   }
 
-  if (!payload.credentials.accessToken && !payload.credentials.pat) {
+  if (!normalizedCredentials.accessToken && !normalizedCredentials.pat) {
     return jsonResponse(
       { ok: false, error: "Enterprise user group sync requires an access token with write_access." },
       400,
@@ -67,8 +68,8 @@ export async function handleUserGroupSyncRequest(
 
   try {
     const client = dependencies.createClient
-      ? dependencies.createClient(payload.credentials)
-      : createStackApiV3Client(payload.credentials, normalizedInstance);
+      ? dependencies.createClient(normalizedCredentials)
+      : createStackApiV3Client(normalizedCredentials, normalizedInstance);
     const runnerInput = {
       csvText: payload.csvText,
       groupNameTemplate: payload.groupNameTemplate,
@@ -87,6 +88,31 @@ export async function handleUserGroupSyncRequest(
       500,
     );
   }
+}
+
+function normalizeWriteCredentials(credentials: SessionCredentials): SessionCredentials {
+  const normalizedCredentials: SessionCredentials = { ...credentials };
+  const accessToken = normalizeOptionalToken(credentials.accessToken);
+  const pat = normalizeOptionalToken(credentials.pat);
+
+  if (accessToken) {
+    normalizedCredentials.accessToken = accessToken;
+  } else {
+    delete normalizedCredentials.accessToken;
+  }
+
+  if (pat) {
+    normalizedCredentials.pat = pat;
+  } else {
+    delete normalizedCredentials.pat;
+  }
+
+  return normalizedCredentials;
+}
+
+function normalizeOptionalToken(token: string | undefined): string | undefined {
+  const trimmedToken = token?.trim();
+  return trimmedToken ? trimmedToken : undefined;
 }
 
 function createStackApiV3Client(
