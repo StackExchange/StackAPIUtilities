@@ -67,6 +67,8 @@ describe("UserGroupSyncPanel", () => {
 
     render(<UserGroupSyncPanel credentials={credentials} />);
 
+    expect(screen.getByRole("region", { name: "User Group Sync" })).toHaveClass("workspace-panel");
+
     await user.upload(
       screen.getByLabelText("Upload user export CSV"),
       new File([csv], "users.csv", { type: "text/csv" }),
