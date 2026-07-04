@@ -10,22 +10,29 @@ import { RunStatus } from "./components/RunStatus";
 import { SessionOverview } from "./components/SessionOverview";
 import { UploadsPanel, type ImportedUploadResult } from "./components/UploadsPanel";
 import { UserGroupSyncPanel } from "./components/UserGroupSyncPanel";
+import { WriteToolsCatalog, type WriteToolId } from "./components/WriteToolsCatalog";
 import { validateCredentialsForReport } from "./credentials/credentialRules";
 import { DEFAULT_REPORT_RUN_SCOPE } from "./domain/reportScope";
 import { reportRegistry } from "./domain/reportRegistry";
 import { createInitialSessionState, sessionReducer } from "./domain/sessionStore";
-import type { ReportId, RunPeriodRole, RunQueueItem } from "./domain/types";
+import type { ReportId, RunPeriodRole, RunQueueItem, SessionCredentials } from "./domain/types";
 import type { ReportRunResponseBody } from "./server/reportRunApi";
 
 export function App() {
   const [state, dispatch] = useReducer(sessionReducer, undefined, createInitialSessionState);
   const [activePanel, setActivePanel] = useState<AppPanel>("report");
+  const [selectedWriteToolId, setSelectedWriteToolId] = useState<WriteToolId>("user-group-sync");
   const [runQueue, setRunQueue] = useState<RunQueueItem[]>([]);
   const [reportScope, setReportScope] = useState(DEFAULT_REPORT_RUN_SCOPE);
 
   function selectReport(reportId: ReportId) {
     dispatch({ type: "report/select", reportId });
     setActivePanel("report");
+  }
+
+  function selectWriteTool(toolId: WriteToolId) {
+    setSelectedWriteToolId(toolId);
+    setActivePanel("write-tools");
   }
 
   async function queueSelectedReportRun(periodRole: RunPeriodRole = "current") {
@@ -158,15 +165,19 @@ export function App() {
   const selectedReportRecords = selectedReportOutput?.records ?? [];
   const datasets = Object.values(state.datasets);
   const datasetCount = datasets.length;
+  const sidebar =
+    activePanel === "write-tools" ? (
+      <WriteToolsCatalog selectedToolId={selectedWriteToolId} onSelect={selectWriteTool} />
+    ) : (
+      <ReportCatalog selectedReportId={state.selectedReportId} onSelect={selectReport} />
+    );
 
   return (
     <AppShell
       activePanel={activePanel}
       onPanelChange={setActivePanel}
       summary={{ credentialsSaved: state.credentials !== null, datasetCount }}
-      sidebar={
-        <ReportCatalog selectedReportId={state.selectedReportId} onSelect={selectReport} />
-      }
+      sidebar={sidebar}
     >
       <SessionOverview state={state} />
       <RunStatus queue={runQueue} />
@@ -184,9 +195,7 @@ export function App() {
           onRemoveDataset={(datasetId) => dispatch({ type: "dataset/remove", datasetId })}
         />
       )}
-      {activePanel === "write-tools" && (
-        <UserGroupSyncPanel credentials={state.credentials} />
-      )}
+      {activePanel === "write-tools" && renderWriteToolPanel(selectedWriteToolId, state.credentials)}
       {activePanel === "report" && (
         <ReportWorkspace
           reportId={state.selectedReportId}
@@ -203,6 +212,16 @@ export function App() {
       )}
     </AppShell>
   );
+}
+
+function renderWriteToolPanel(toolId: WriteToolId, credentials: SessionCredentials | null) {
+  switch (toolId) {
+    case "user-group-sync":
+      return <UserGroupSyncPanel credentials={credentials} />;
+  }
+
+  const unhandledToolId: never = toolId;
+  return unhandledToolId;
 }
 
 function getLiveRunErrorMessage(error: unknown, _reportTitle: string): string {

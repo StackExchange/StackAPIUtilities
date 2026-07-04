@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { StackOverflowLogo } from "./StackOverflowLogo";
 
 export type AppPanel = "report" | "credentials" | "uploads" | "datasets" | "write-tools";
 
@@ -32,13 +33,9 @@ export function AppShell({ activePanel, onPanelChange, sidebar, children, summar
     <div className="app-shell">
       <header className="app-topbar">
         <div className="app-brand-block">
-          <div className="app-brand-mark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
+          <StackOverflowLogo className="app-brand-logo" />
           <div className="app-title">
-            <p className="app-kicker">SO4T reports</p>
+            <p className="app-kicker">Enterprise API tools</p>
             <h1 className="app-heading">Stack API Utilities</h1>
           </div>
         </div>
