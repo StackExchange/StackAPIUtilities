@@ -308,7 +308,15 @@ function canonicalizeUserGroupSyncPlan(plan: UserGroupSyncPlan): CanonicalUserGr
 }
 
 function compareGroups(left: CanonicalUserGroupSyncGroup, right: CanonicalUserGroupSyncGroup): number {
-  return compareStrings(left.groupName, right.groupName) || compareStrings(left.manager, right.manager);
+  return (
+    compareStrings(left.groupName, right.groupName) ||
+    compareStrings(left.manager, right.manager) ||
+    compareNullableNumbers(left.existingGroupId, right.existingGroupId) ||
+    compareBooleans(left.createGroup, right.createGroup) ||
+    compareNumberArrays(left.desiredUserIds, right.desiredUserIds) ||
+    compareNumberArrays(left.addUserIds, right.addUserIds) ||
+    compareNumberArrays(left.removeUserIds, right.removeUserIds)
+  );
 }
 
 function compareSkippedRows(
@@ -325,6 +333,43 @@ function compareSkippedRows(
 
 function sortNumbers(values: number[]): number[] {
   return [...values].sort((left, right) => left - right);
+}
+
+function compareNullableNumbers(left: number | null, right: number | null): number {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left === null) {
+    return -1;
+  }
+
+  if (right === null) {
+    return 1;
+  }
+
+  return left - right;
+}
+
+function compareBooleans(left: boolean, right: boolean): number {
+  if (left === right) {
+    return 0;
+  }
+
+  return left ? 1 : -1;
+}
+
+function compareNumberArrays(left: number[], right: number[]): number {
+  const length = Math.min(left.length, right.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const comparison = left[index] - right[index];
+    if (comparison !== 0) {
+      return comparison;
+    }
+  }
+
+  return left.length - right.length;
 }
 
 function compareStrings(left: string, right: string): number {

@@ -149,7 +149,7 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
       const body = (await response.json()) as UserGroupSyncResponseBody;
 
       if (!body.ok) {
-        if (action === "preview" && latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
+        if (latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
           return;
         }
         setError(body.error);
@@ -173,11 +173,14 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
         setApplyResult(null);
         setMessage("Preview ready.");
       } else {
+        if (latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
+          return;
+        }
         setApplyResult(body.result as UserGroupSyncApplyResult);
         setMessage("Apply completed.");
       }
     } catch (caughtError) {
-      if (action === "preview" && latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
+      if (latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
         return;
       }
       setMessage(null);

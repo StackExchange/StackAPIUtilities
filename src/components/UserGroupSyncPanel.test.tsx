@@ -197,6 +197,91 @@ describe("UserGroupSyncPanel", () => {
     expect(await screen.findByText("create-group succeeded for Ada Lovelace VRM: 1")).toBeInTheDocument();
   });
 
+  it("ignores a pending apply success response when inputs change before it resolves", async () => {
+    const user = userEvent.setup();
+    const pendingApply = deferred<Response>();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(addOnlyPreviewBody))
+      .mockReturnValueOnce(pendingApply.promise);
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    await user.upload(
+      screen.getByLabelText("Upload user export CSV"),
+      new File([csv], "users.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+    expect(await screen.findByText("Ada Lovelace VRM")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Apply changes" }));
+    await user.clear(screen.getByLabelText("Group name template"));
+    await user.type(screen.getByLabelText("Group name template"), "Owners");
+
+    pendingApply.resolve(
+      jsonResponse({
+        ok: true,
+        result: {
+          preview: {
+            groups: [],
+            skippedRows: [],
+            blockingErrors: [],
+            syncMode: "add-only",
+            groupNameTemplate: "{Senior Manager} VRM",
+          },
+          operations: [
+            {
+              kind: "create-group",
+              groupName: "Ada Lovelace VRM",
+              userIds: [1],
+              status: "succeeded",
+            },
+          ],
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview changes" })).toBeEnabled();
+    });
+    expect(fetchActions(fetchMock)).toEqual(["preview", "apply"]);
+    expect(screen.queryByText("Apply completed.")).not.toBeInTheDocument();
+    expect(screen.queryByText("create-group succeeded for Ada Lovelace VRM: 1")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
+  });
+
+  it("ignores a pending apply error response when inputs change before it resolves", async () => {
+    const user = userEvent.setup();
+    const pendingApply = deferred<Response>();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(addOnlyPreviewBody))
+      .mockReturnValueOnce(pendingApply.promise);
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    await user.upload(
+      screen.getByLabelText("Upload user export CSV"),
+      new File([csv], "users.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+    expect(await screen.findByText("Ada Lovelace VRM")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Apply changes" }));
+    await user.clear(screen.getByLabelText("Group name template"));
+    await user.type(screen.getByLabelText("Group name template"), "Owners");
+
+    pendingApply.resolve(jsonResponse({ ok: false, error: "Apply failed" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview changes" })).toBeEnabled();
+    });
+    expect(fetchActions(fetchMock)).toEqual(["preview", "apply"]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Apply failed")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
+  });
+
   it("ignores a pending preview response when inputs change before it resolves", async () => {
     const user = userEvent.setup();
     const pendingPreview = deferred<Response>();
