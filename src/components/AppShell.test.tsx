@@ -38,4 +38,16 @@ describe("AppShell", () => {
     expect(screen.getByRole("heading", { name: "Uploads" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Tag Report" })).not.toBeInTheDocument();
   });
+
+  it("shows a run status when the selected report run is requested", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Run Tag Report" }));
+
+    expect(
+      screen.getByText("Tag Report queued for browser-only execution wiring."),
+    ).toBeInTheDocument();
+  });
 });

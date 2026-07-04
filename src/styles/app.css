@@ -162,6 +162,53 @@ body {
   background: var(--white);
 }
 
+.run-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.report-tabs {
+  margin-top: 24px;
+}
+
+.dashboard-placeholder,
+.empty-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px dashed var(--black-200);
+  border-radius: 6px;
+  background: var(--black-050);
+  color: var(--black-600);
+}
+
+.raw-table-panel {
+  margin-top: 16px;
+}
+
+.data-table {
+  display: grid;
+  gap: 8px;
+}
+
+.data-table-container {
+  max-height: 440px;
+  overflow: auto;
+}
+
+.data-table td,
+.data-table th {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.upload-input-label {
+  margin-top: 16px;
+  max-width: 520px;
+}
+
 @media (max-width: 760px) {
   .app-topbar {
     align-items: flex-start;
