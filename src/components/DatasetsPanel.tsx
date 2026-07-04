@@ -1,6 +1,7 @@
 import { formatPeriodLabel } from "../domain/reportScope";
 import { reportRegistry } from "../domain/reportRegistry";
 import type { ReportId, RunPeriodRole, SessionDataset } from "../domain/types";
+import { downloadSessionDataset } from "../utils/datasetDownloads";
 
 interface DatasetsPanelProps {
   datasets: SessionDataset[];
@@ -48,14 +49,32 @@ export function DatasetsPanel({ datasets, onRemoveDataset }: DatasetsPanelProps)
                   <td>{formatSource(dataset.source)}</td>
                   <td>{formatLoadedAt(dataset.loadedAt)}</td>
                   <td>
-                    <button
-                      className="s-btn s-btn__outlined s-btn__xs"
-                      type="button"
-                      aria-label={`Remove ${dataset.name} ${dataset.periodRole ?? "upload"} dataset`}
-                      onClick={() => onRemoveDataset(dataset.id)}
-                    >
-                      Remove
-                    </button>
+                    <div className="dataset-actions">
+                      <button
+                        className="s-btn s-btn__outlined s-btn__xs"
+                        type="button"
+                        aria-label={`Download ${dataset.name} ${dataset.periodRole ?? "upload"} dataset as CSV`}
+                        onClick={() => downloadSessionDataset(dataset, "csv")}
+                      >
+                        CSV
+                      </button>
+                      <button
+                        className="s-btn s-btn__outlined s-btn__xs"
+                        type="button"
+                        aria-label={`Download ${dataset.name} ${dataset.periodRole ?? "upload"} dataset as JSON`}
+                        onClick={() => downloadSessionDataset(dataset, "json")}
+                      >
+                        JSON
+                      </button>
+                      <button
+                        className="s-btn s-btn__outlined s-btn__xs"
+                        type="button"
+                        aria-label={`Remove ${dataset.name} ${dataset.periodRole ?? "upload"} dataset`}
+                        onClick={() => onRemoveDataset(dataset.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

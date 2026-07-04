@@ -1,8 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionDataset } from "../domain/types";
+import { downloadSessionDataset } from "../utils/datasetDownloads";
 import { DatasetsPanel } from "./DatasetsPanel";
+
+vi.mock("../utils/datasetDownloads", () => ({
+  downloadSessionDataset: vi.fn(),
+}));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("DatasetsPanel", () => {
   it("shows an empty state before datasets are loaded", () => {
@@ -27,6 +36,19 @@ describe("DatasetsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Remove users current dataset" }));
 
     expect(onRemoveDataset).toHaveBeenCalledWith("dataset-1");
+  });
+
+  it("downloads scoped live datasets as CSV and JSON", async () => {
+    const user = userEvent.setup();
+    const dataset = liveDataset();
+
+    render(<DatasetsPanel datasets={[dataset]} onRemoveDataset={() => undefined} />);
+
+    await user.click(screen.getByRole("button", { name: "Download users current dataset as CSV" }));
+    await user.click(screen.getByRole("button", { name: "Download users current dataset as JSON" }));
+
+    expect(downloadSessionDataset).toHaveBeenNthCalledWith(1, dataset, "csv");
+    expect(downloadSessionDataset).toHaveBeenNthCalledWith(2, dataset, "json");
   });
 });
 

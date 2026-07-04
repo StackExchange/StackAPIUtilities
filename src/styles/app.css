@@ -446,6 +446,13 @@ select {
   border-bottom: 0;
 }
 
+.dataset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 168px;
+}
+
 .credential-session-copy {
   color: var(--black-700);
   font-weight: 600;

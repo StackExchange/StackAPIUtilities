@@ -142,6 +142,12 @@ describe("AppShell", () => {
     expect(within(datasetsPanel).getByRole("heading", { name: "Datasets" })).toBeInTheDocument();
     expect(within(datasetsPanel).getByText("Inactive Users")).toBeInTheDocument();
     expect(within(datasetsPanel).getByText("2026-06-01 to 2026-06-30")).toBeInTheDocument();
+    expect(
+      within(datasetsPanel).getByRole("button", { name: "Download users current dataset as CSV" }),
+    ).toBeInTheDocument();
+    expect(
+      within(datasetsPanel).getByRole("button", { name: "Download users current dataset as JSON" }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Reports" }));
     await user.click(screen.getByRole("tab", { name: "Raw Table" }));
