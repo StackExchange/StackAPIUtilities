@@ -277,7 +277,7 @@ describe("UserGroupSyncPanel", () => {
     expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
   });
 
-  it("warns when credentials are missing and reports an error if preview is requested", async () => {
+  it("warns when credentials are missing and keeps preview disabled after CSV upload", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
@@ -291,12 +291,10 @@ describe("UserGroupSyncPanel", () => {
       screen.getByLabelText("Upload user export CSV"),
       new File([csv], "users.csv", { type: "text/csv" }),
     );
-    await user.click(screen.getByRole("button", { name: "Preview changes" }));
 
+    expect(screen.getByRole("button", { name: "Preview changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Save Enterprise session credentials before using write tools.",
-    );
   });
 });
 
