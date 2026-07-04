@@ -83,17 +83,45 @@ describe("applyUserGroupSync", () => {
 
   it("applies add-only changes without removals", async () => {
     const client = createClient();
+    vi.mocked(client.getUserGroups).mockResolvedValue([
+      {
+        id: 10,
+        name: "Ada Lovelace VRM",
+        users: [
+          { id: 1, name: "Grace Hopper" },
+          { id: 99, name: "Former Member" },
+        ],
+      },
+    ]);
 
     const result = await applyUserGroupSync(createInput(client));
 
     expect(client.addUserGroupMembers).toHaveBeenCalledWith(10, [2]);
     expect(client.removeUserGroupMember).not.toHaveBeenCalled();
+    expect(result.preview.groups[0]).toEqual(expect.objectContaining({ removeUserIds: [] }));
     expect(result.operations).toEqual([
       {
         kind: "add-members",
         groupName: "Ada Lovelace VRM",
         userIds: [2],
         status: "succeeded",
+      },
+    ]);
+  });
+
+  it("records add-member failures", async () => {
+    const client = createClient();
+    vi.mocked(client.addUserGroupMembers).mockRejectedValue(new Error("add failed"));
+
+    const result = await applyUserGroupSync(createInput(client));
+
+    expect(result.operations).toEqual([
+      {
+        kind: "add-members",
+        groupName: "Ada Lovelace VRM",
+        userIds: [2],
+        status: "failed",
+        error: "add failed",
       },
     ]);
   });
@@ -134,6 +162,86 @@ describe("applyUserGroupSync", () => {
     ]);
   });
 
+  it("skips exact-sync removals for a group when adding members fails", async () => {
+    const client = createClient();
+    vi.mocked(client.getUserGroups).mockResolvedValue([
+      {
+        id: 10,
+        name: "Ada Lovelace VRM",
+        users: [
+          { id: 1, name: "Grace Hopper" },
+          { id: 99, name: "Former Member" },
+        ],
+      },
+    ]);
+    vi.mocked(client.addUserGroupMembers).mockRejectedValue(new Error("cannot add members"));
+
+    const result = await applyUserGroupSync({
+      ...createInput(client),
+      syncMode: "exact-sync",
+    });
+
+    expect(client.removeUserGroupMember).not.toHaveBeenCalled();
+    expect(result.operations).toEqual([
+      {
+        kind: "add-members",
+        groupName: "Ada Lovelace VRM",
+        userIds: [2],
+        status: "failed",
+        error: "cannot add members",
+      },
+    ]);
+  });
+
+  it("records per-user remove failures and continues removing remaining users", async () => {
+    const client = createClient();
+    vi.mocked(client.getUserGroups).mockResolvedValue([
+      {
+        id: 10,
+        name: "Ada Lovelace VRM",
+        users: [
+          { id: 1, name: "Grace Hopper" },
+          { id: 99, name: "Former Member" },
+          { id: 100, name: "Another Former Member" },
+        ],
+      },
+    ]);
+    vi.mocked(client.removeUserGroupMember).mockImplementation(async (_userGroupId: number, userId: number) => {
+      if (userId === 99) {
+        throw new Error("cannot remove 99");
+      }
+    });
+
+    const result = await applyUserGroupSync({
+      ...createInput(client),
+      syncMode: "exact-sync",
+    });
+
+    expect(client.removeUserGroupMember).toHaveBeenCalledWith(10, 99);
+    expect(client.removeUserGroupMember).toHaveBeenCalledWith(10, 100);
+    expect(result.operations).toEqual([
+      {
+        kind: "add-members",
+        groupName: "Ada Lovelace VRM",
+        userIds: [2],
+        status: "succeeded",
+      },
+      {
+        kind: "remove-member",
+        groupName: "Ada Lovelace VRM",
+        userIds: [99],
+        status: "failed",
+        error: "cannot remove 99",
+      },
+      {
+        kind: "remove-member",
+        groupName: "Ada Lovelace VRM",
+        userIds: [100],
+        status: "succeeded",
+      },
+    ]);
+  });
+
   it("creates missing groups without separately adding the same members", async () => {
     const client = createClient();
     vi.mocked(client.getUserGroups).mockResolvedValue([]);
@@ -151,6 +259,29 @@ describe("applyUserGroupSync", () => {
         groupName: "Ada Lovelace VRM",
         userIds: [1, 2],
         status: "succeeded",
+      },
+    ]);
+  });
+
+  it("records create failures and skips later writes for that group", async () => {
+    const client = createClient();
+    vi.mocked(client.getUserGroups).mockResolvedValue([]);
+    vi.mocked(client.createUserGroup).mockRejectedValue(new Error("create failed"));
+
+    const result = await applyUserGroupSync({
+      ...createInput(client),
+      syncMode: "exact-sync",
+    });
+
+    expect(client.addUserGroupMembers).not.toHaveBeenCalled();
+    expect(client.removeUserGroupMember).not.toHaveBeenCalled();
+    expect(result.operations).toEqual([
+      {
+        kind: "create-group",
+        groupName: "Ada Lovelace VRM",
+        userIds: [1, 2],
+        status: "failed",
+        error: "create failed",
       },
     ]);
   });
