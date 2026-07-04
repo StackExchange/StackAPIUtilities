@@ -38,6 +38,7 @@ describe("sessionStore", () => {
       selectedReportIds: ["tag-report"],
       datasets: {},
       reportOutputs: {},
+      reportRunSnapshots: [],
       warnings: [],
       runQueue: [],
     });
@@ -91,9 +92,11 @@ describe("sessionStore", () => {
       records: [{ id: 1 }],
     });
 
-    expect(state.datasets.users?.records).toEqual([{ id: 1 }]);
-    expect(state.datasets.users?.source).toBe("upload");
-    expect(state.datasets.users?.loadedAt).toEqual(expect.any(String));
+    const [dataset] = Object.values(state.datasets);
+    expect(dataset?.name).toBe("users");
+    expect(dataset?.records).toEqual([{ id: 1 }]);
+    expect(dataset?.source).toBe("upload");
+    expect(dataset?.loadedAt).toEqual(expect.any(String));
   });
 
   it("stores imported report outputs by report", () => {
@@ -106,7 +109,7 @@ describe("sessionStore", () => {
     });
 
     expect(state.selectedReportId).toBe("tag-report");
-    expect(state.datasets.tags?.records).toEqual([{ tagName: "python" }]);
+    expect(Object.values(state.datasets)[0]?.records).toEqual([{ tagName: "python" }]);
     expect(state.reportOutputs["tag-report"]?.fileName).toBe("tag_metrics.csv");
     expect(state.reportOutputs["tag-report"]?.records).toEqual([{ tagName: "python" }]);
   });
@@ -115,6 +118,11 @@ describe("sessionStore", () => {
     const state = sessionReducer(createInitialSessionState(), {
       type: "live/loaded",
       reportId: "inactive-users",
+      periodRole: "current",
+      scope: { startDate: "2026-01-01", endDate: "2026-01-31" },
+      pageSize: 50,
+      maxPagesPerDataset: 2,
+      warnings: [],
       datasets: [
         {
           datasetName: "users",
@@ -124,12 +132,83 @@ describe("sessionStore", () => {
     });
 
     expect(state.selectedReportId).toBe("inactive-users");
-    expect(state.datasets.users?.source).toBe("live-api");
-    expect(state.datasets.users?.records).toEqual([{ user_id: 1, display_name: "Ada" }]);
+    const [dataset] = Object.values(state.datasets);
+    expect(dataset?.source).toBe("live-api");
+    expect(dataset?.periodRole).toBe("current");
+    expect(dataset?.scope).toEqual({ startDate: "2026-01-01", endDate: "2026-01-31" });
+    expect(dataset?.records).toEqual([{ user_id: 1, display_name: "Ada" }]);
+    expect(state.reportRunSnapshots).toHaveLength(1);
+    expect(state.reportRunSnapshots[0]).toEqual(
+      expect.objectContaining({
+        reportId: "inactive-users",
+        periodRole: "current",
+        scope: { startDate: "2026-01-01", endDate: "2026-01-31" },
+        pageSize: 50,
+        maxPagesPerDataset: 2,
+      }),
+    );
     expect(state.reportOutputs["inactive-users"]?.source).toBe("live-api");
     expect(state.reportOutputs["inactive-users"]?.records).toEqual([
       { datasetName: "users", user_id: 1, display_name: "Ada" },
     ]);
+  });
+
+  it("stores current and comparison live snapshots without overwriting dataset names", () => {
+    const current = sessionReducer(createInitialSessionState(), {
+      type: "live/loaded",
+      reportId: "inactive-users",
+      periodRole: "current",
+      scope: { startDate: "2026-06-01", endDate: "2026-06-30" },
+      pageSize: 25,
+      maxPagesPerDataset: 1,
+      warnings: [],
+      datasets: [
+        {
+          datasetName: "users",
+          records: [{ user_id: 1, display_name: "Ada" }],
+        },
+      ],
+    });
+    const comparison = sessionReducer(current, {
+      type: "live/loaded",
+      reportId: "inactive-users",
+      periodRole: "comparison",
+      scope: { startDate: "2026-05-01", endDate: "2026-05-31" },
+      pageSize: 25,
+      maxPagesPerDataset: 1,
+      warnings: [],
+      datasets: [
+        {
+          datasetName: "users",
+          records: [{ user_id: 2, display_name: "Grace" }],
+        },
+      ],
+    });
+
+    expect(Object.values(comparison.datasets)).toHaveLength(2);
+    expect(Object.values(comparison.datasets).map((dataset) => dataset.periodRole)).toEqual([
+      "current",
+      "comparison",
+    ]);
+    expect(comparison.reportRunSnapshots).toHaveLength(2);
+    expect(comparison.reportOutputs["inactive-users"]?.records).toEqual([
+      { datasetName: "users", user_id: 1, display_name: "Ada" },
+    ]);
+    expect(comparison.reportOutputs["inactive-users"]?.comparisonRecords).toEqual([
+      { datasetName: "users", user_id: 2, display_name: "Grace" },
+    ]);
+  });
+
+  it("removes a managed dataset from the active session", () => {
+    const withDataset = sessionReducer(createInitialSessionState(), {
+      type: "dataset/set",
+      datasetName: "users",
+      records: [{ id: 1 }],
+    });
+    const [datasetId] = Object.keys(withDataset.datasets);
+    const withoutDataset = sessionReducer(withDataset, { type: "dataset/remove", datasetId });
+
+    expect(withoutDataset.datasets[datasetId]).toBeUndefined();
   });
 
   it("clears credentials and datasets on reset", () => {
@@ -143,5 +222,6 @@ describe("sessionStore", () => {
     expect(reset.credentials).toBeNull();
     expect(reset.datasets).toEqual({});
     expect(reset.reportOutputs).toEqual({});
+    expect(reset.reportRunSnapshots).toEqual([]);
   });
 });

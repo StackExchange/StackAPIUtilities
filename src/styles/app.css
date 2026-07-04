@@ -405,6 +405,47 @@ select {
   font-weight: 700;
 }
 
+.datasets-panel {
+  max-width: 1160px;
+}
+
+.datasets-table-wrap {
+  width: 100%;
+  margin-top: 18px;
+  overflow-x: auto;
+  border: 1px solid var(--black-100);
+  border-radius: 8px;
+}
+
+.datasets-table {
+  width: 100%;
+  min-width: 840px;
+  border-collapse: collapse;
+  background: var(--white);
+  font-size: 13px;
+}
+
+.datasets-table th,
+.datasets-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--black-100);
+  color: var(--black-700);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.datasets-table th {
+  color: var(--black-500);
+  background: var(--black-025);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.datasets-table tr:last-child td {
+  border-bottom: 0;
+}
+
 .credential-session-copy {
   color: var(--black-700);
   font-weight: 600;

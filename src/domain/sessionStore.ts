@@ -1,4 +1,13 @@
-import type { DatasetName, ReportId, SessionCredentials, SessionDataset, SessionState } from "./types";
+import type {
+  DatasetName,
+  PeriodScope,
+  ReportId,
+  ReportWarning,
+  RunPeriodRole,
+  SessionCredentials,
+  SessionDataset,
+  SessionState,
+} from "./types";
 
 interface LiveDatasetPayload {
   datasetName: DatasetName;
@@ -10,7 +19,16 @@ type SessionAction =
   | { type: "report/select"; reportId: ReportId }
   | { type: "reports/selectMany"; reportIds: ReportId[] }
   | { type: "dataset/set"; datasetName: DatasetName; records: unknown[] }
-  | { type: "live/loaded"; reportId: ReportId; datasets: LiveDatasetPayload[] }
+  | {
+      type: "live/loaded";
+      reportId: ReportId;
+      periodRole: RunPeriodRole;
+      scope: PeriodScope;
+      pageSize: number;
+      maxPagesPerDataset: number;
+      warnings: ReportWarning[];
+      datasets: LiveDatasetPayload[];
+    }
   | {
       type: "import/loaded";
       datasetName: DatasetName;
@@ -18,6 +36,7 @@ type SessionAction =
       records: Record<string, unknown>[];
       reportId: ReportId;
     }
+  | { type: "dataset/remove"; datasetId: string }
   | { type: "session/reset" };
 
 export function createInitialSessionState(): SessionState {
@@ -27,6 +46,7 @@ export function createInitialSessionState(): SessionState {
     selectedReportIds: ["tag-report"],
     datasets: {},
     reportOutputs: {},
+    reportRunSnapshots: [],
     warnings: [],
     runQueue: [],
   };
@@ -49,20 +69,10 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         selectedReportIds: action.reportIds,
       };
     case "dataset/set":
-      return {
-        ...state,
-        datasets: {
-          ...state.datasets,
-          [action.datasetName]: {
-            name: action.datasetName,
-            records: action.records,
-            loadedAt: new Date().toISOString(),
-            source: "upload",
-          },
-        },
-      };
+      return storeUploadedDataset(state, action.datasetName, action.records);
     case "import/loaded": {
       const loadedAt = new Date().toISOString();
+      const datasetId = createDatasetId("upload", action.datasetName, loadedAt);
 
       return {
         ...state,
@@ -70,11 +80,14 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         selectedReportIds: [action.reportId],
         datasets: {
           ...state.datasets,
-          [action.datasetName]: {
+          [datasetId]: {
+            id: datasetId,
             name: action.datasetName,
             records: action.records,
             loadedAt,
             source: "upload",
+            fileName: action.fileName,
+            reportId: action.reportId,
           },
         },
         reportOutputs: {
@@ -96,19 +109,59 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       }
 
       const loadedAt = new Date().toISOString();
-      const liveDatasets: Partial<Record<DatasetName, SessionDataset>> = {};
+      const snapshotId = createSnapshotId(action.reportId, action.periodRole, loadedAt);
+      const liveDatasets: Record<string, SessionDataset> = {};
+      const datasetIds: string[] = [];
       const reportRecords = action.datasets.flatMap(({ datasetName, records }) =>
         records.map((record) => ({ datasetName, ...record })),
       );
 
-      for (const dataset of action.datasets) {
-        liveDatasets[dataset.datasetName] = {
+      action.datasets.forEach((dataset, index) => {
+        const datasetId = createDatasetId(snapshotId, dataset.datasetName, String(index));
+        datasetIds.push(datasetId);
+        liveDatasets[datasetId] = {
+          id: datasetId,
+          snapshotId,
+          reportId: action.reportId,
           name: dataset.datasetName,
           records: dataset.records,
           loadedAt,
           source: "live-api",
+          periodRole: action.periodRole,
+          scope: action.scope,
+          warnings: action.warnings,
         };
-      }
+      });
+
+      const previousOutput = state.reportOutputs[action.reportId];
+      const baseOutput = {
+        reportId: action.reportId,
+        datasetName: action.datasets[0].datasetName,
+        fileName: "Live API run",
+        loadedAt,
+        source: "live-api" as const,
+        warnings: action.warnings,
+      };
+      const nextOutput =
+        action.periodRole === "comparison"
+          ? {
+              ...baseOutput,
+              records: previousOutput?.records ?? [],
+              comparisonRecords: reportRecords,
+              currentScope: previousOutput?.currentScope,
+              comparisonScope: action.scope,
+              currentSnapshotId: previousOutput?.currentSnapshotId,
+              comparisonSnapshotId: snapshotId,
+            }
+          : {
+              ...baseOutput,
+              records: reportRecords,
+              comparisonRecords: previousOutput?.comparisonRecords,
+              currentScope: action.scope,
+              comparisonScope: previousOutput?.comparisonScope,
+              currentSnapshotId: snapshotId,
+              comparisonSnapshotId: previousOutput?.comparisonSnapshotId,
+            };
 
       return {
         ...state,
@@ -118,17 +171,43 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
           ...state.datasets,
           ...liveDatasets,
         },
+        reportRunSnapshots: [
+          ...state.reportRunSnapshots,
+          {
+            id: snapshotId,
+            reportId: action.reportId,
+            periodRole: action.periodRole,
+            scope: action.scope,
+            pageSize: action.pageSize,
+            maxPagesPerDataset: action.maxPagesPerDataset,
+            loadedAt,
+            datasetIds,
+            warnings: action.warnings,
+          },
+        ],
         reportOutputs: {
           ...state.reportOutputs,
-          [action.reportId]: {
-            reportId: action.reportId,
-            datasetName: action.datasets[0].datasetName,
-            fileName: "Live API run",
-            records: reportRecords,
-            loadedAt,
-            source: "live-api",
-          },
+          [action.reportId]: nextOutput,
         },
+        warnings: [...state.warnings, ...action.warnings],
+      };
+    }
+    case "dataset/remove": {
+      const { [action.datasetId]: removedDataset, ...remainingDatasets } = state.datasets;
+
+      if (!removedDataset) {
+        return state;
+      }
+
+      return {
+        ...state,
+        datasets: remainingDatasets,
+        reportRunSnapshots: state.reportRunSnapshots
+          .map((snapshot) => ({
+            ...snapshot,
+            datasetIds: snapshot.datasetIds.filter((datasetId) => datasetId !== action.datasetId),
+          }))
+          .filter((snapshot) => snapshot.datasetIds.length > 0),
       };
     }
     case "session/reset":
@@ -136,4 +215,35 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
     default:
       return state;
   }
+}
+
+function storeUploadedDataset(
+  state: SessionState,
+  datasetName: DatasetName,
+  records: unknown[],
+): SessionState {
+  const loadedAt = new Date().toISOString();
+  const datasetId = createDatasetId("upload", datasetName, loadedAt);
+
+  return {
+    ...state,
+    datasets: {
+      ...state.datasets,
+      [datasetId]: {
+        id: datasetId,
+        name: datasetName,
+        records,
+        loadedAt,
+        source: "upload",
+      },
+    },
+  };
+}
+
+function createSnapshotId(reportId: ReportId, periodRole: RunPeriodRole, loadedAt: string): string {
+  return createDatasetId("snapshot", reportId, periodRole, loadedAt);
+}
+
+function createDatasetId(...parts: string[]): string {
+  return parts.join("__");
 }

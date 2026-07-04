@@ -77,10 +77,29 @@ export interface ReportWarning {
 }
 
 export interface SessionDataset {
+  id: string;
+  snapshotId?: string;
+  reportId?: ReportId;
   name: DatasetName;
   records: unknown[];
   loadedAt: string;
   source: "live-api" | "upload";
+  periodRole?: RunPeriodRole;
+  scope?: PeriodScope;
+  warnings?: ReportWarning[];
+  fileName?: string;
+}
+
+export interface ReportRunSnapshot {
+  id: string;
+  reportId: ReportId;
+  periodRole: RunPeriodRole;
+  scope: PeriodScope;
+  pageSize: number;
+  maxPagesPerDataset: number;
+  loadedAt: string;
+  datasetIds: string[];
+  warnings: ReportWarning[];
 }
 
 export interface ReportOutput {
@@ -88,8 +107,14 @@ export interface ReportOutput {
   datasetName: DatasetName;
   fileName: string;
   records: Record<string, unknown>[];
+  comparisonRecords?: Record<string, unknown>[];
   loadedAt: string;
   source: "live-api" | "upload";
+  currentScope?: PeriodScope;
+  comparisonScope?: PeriodScope;
+  currentSnapshotId?: string;
+  comparisonSnapshotId?: string;
+  warnings?: ReportWarning[];
 }
 
 export interface RunQueueItem {
@@ -103,8 +128,9 @@ export interface SessionState {
   credentials: SessionCredentials | null;
   selectedReportId: ReportId;
   selectedReportIds: readonly ReportId[];
-  datasets: Partial<Record<DatasetName, SessionDataset>>;
+  datasets: Record<string, SessionDataset>;
   reportOutputs: Partial<Record<ReportId, ReportOutput>>;
+  reportRunSnapshots: ReportRunSnapshot[];
   warnings: ReportWarning[];
   runQueue: RunQueueItem[];
 }

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
@@ -90,6 +90,11 @@ describe("AppShell", () => {
         result: {
           reportId: "inactive-users",
           reportTitle: "Inactive Users",
+          periodRole: "current",
+          scope: { startDate: "2026-06-01", endDate: "2026-06-30" },
+          pageSize: 100,
+          maxPagesPerDataset: 5,
+          warnings: [],
           datasets: [
             {
               datasetName: "users",
@@ -131,6 +136,14 @@ describe("AppShell", () => {
     expect(screen.getAllByText("users").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Live Records")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Datasets" }));
+
+    const datasetsPanel = screen.getByRole("region", { name: "Datasets" });
+    expect(within(datasetsPanel).getByRole("heading", { name: "Datasets" })).toBeInTheDocument();
+    expect(within(datasetsPanel).getByText("Inactive Users")).toBeInTheDocument();
+    expect(within(datasetsPanel).getByText("2026-06-01 to 2026-06-30")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Reports" }));
     await user.click(screen.getByRole("tab", { name: "Raw Table" }));
 
     expect(screen.getByText("Ada")).toBeInTheDocument();
@@ -144,6 +157,11 @@ describe("AppShell", () => {
         result: {
           reportId: "tag-report",
           reportTitle: "Tag Report",
+          periodRole: "current",
+          scope: {},
+          pageSize: 100,
+          maxPagesPerDataset: 5,
+          warnings: [],
           datasets: [
             { datasetName: "tags", records: [{ name: "python" }] },
             { datasetName: "users", records: [{ user_id: 1 }] },

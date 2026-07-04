@@ -5,7 +5,7 @@ interface SessionOverviewProps {
 }
 
 export function SessionOverview({ state }: SessionOverviewProps) {
-  const datasets = Object.values(state.datasets).filter((dataset) => dataset !== undefined);
+  const datasets = Object.values(state.datasets);
 
   if (datasets.length === 0) {
     return null;
@@ -18,7 +18,7 @@ export function SessionOverview({ state }: SessionOverviewProps) {
       </h2>
       <div className="session-overview-grid">
         {datasets.map((dataset) => (
-          <article className="dataset-card" key={dataset.name}>
+          <article className="dataset-card" key={dataset.id}>
             <h3 className="fs-body2 mb4">{dataset.name}</h3>
             <p className="fs-caption fc-light m0">{dataset.records.length} records</p>
           </article>

@@ -3,6 +3,7 @@
 import { useReducer, useState } from "react";
 import { AppShell, type AppPanel } from "./components/AppShell";
 import { CredentialsPanel } from "./components/CredentialsPanel";
+import { DatasetsPanel } from "./components/DatasetsPanel";
 import { ReportCatalog } from "./components/ReportCatalog";
 import { ReportWorkspace } from "./components/ReportWorkspace";
 import { RunStatus } from "./components/RunStatus";
@@ -87,7 +88,16 @@ export function App() {
       }
 
       const result = body.result;
-      dispatch({ type: "live/loaded", reportId: result.reportId, datasets: result.datasets });
+      dispatch({
+        type: "live/loaded",
+        reportId: result.reportId,
+        periodRole: result.periodRole,
+        scope: result.scope,
+        pageSize: result.pageSize,
+        maxPagesPerDataset: result.maxPagesPerDataset,
+        warnings: result.warnings,
+        datasets: result.datasets,
+      });
       setRunQueue([
         ...result.messages.map((message, index) => ({
           id: `${state.selectedReportId}-live-dataset-${index}`,
@@ -145,7 +155,8 @@ export function App() {
 
   const selectedReportOutput = state.reportOutputs[state.selectedReportId];
   const selectedReportRecords = selectedReportOutput?.records ?? [];
-  const datasetCount = Object.values(state.datasets).filter((dataset) => dataset !== undefined).length;
+  const datasets = Object.values(state.datasets);
+  const datasetCount = datasets.length;
 
   return (
     <AppShell
@@ -166,6 +177,12 @@ export function App() {
         />
       )}
       {activePanel === "uploads" && <UploadsPanel onImported={importUploadedReport} />}
+      {activePanel === "datasets" && (
+        <DatasetsPanel
+          datasets={datasets}
+          onRemoveDataset={(datasetId) => dispatch({ type: "dataset/remove", datasetId })}
+        />
+      )}
       {activePanel === "report" && (
         <ReportWorkspace
           reportId={state.selectedReportId}
