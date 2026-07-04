@@ -26,6 +26,7 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestInFlightRef = useRef(false);
+  const fileReadRequestIdRef = useRef(0);
   const inputSnapshotKey = createInputSnapshotKey({
     credentials,
     csvText,
@@ -56,6 +57,8 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
   }
 
   async function handleFile(fileList: FileList | null) {
+    const fileReadRequestId = fileReadRequestIdRef.current + 1;
+    fileReadRequestIdRef.current = fileReadRequestId;
     const file = fileList?.[0];
     if (!file) return;
 
@@ -65,11 +68,17 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
 
     try {
       const text = await readFileText(file);
+      if (fileReadRequestId !== fileReadRequestIdRef.current) {
+        return;
+      }
       setCsvText(text);
       setFileName(file.name);
       setError(null);
       setMessage(`Loaded ${file.name}.`);
     } catch (caughtError) {
+      if (fileReadRequestId !== fileReadRequestIdRef.current) {
+        return;
+      }
       setMessage(null);
       setError(caughtError instanceof Error ? caughtError.message : `Unable to read ${file.name}.`);
     }
@@ -97,12 +106,13 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
     }
 
     const requestSnapshotKey = inputSnapshotKey;
+    const expectedPreview = action === "apply" ? preview : null;
 
     if (
       action === "apply" &&
-      (preview === null ||
+      (expectedPreview === null ||
         previewSnapshotKey !== requestSnapshotKey ||
-        preview.blockingErrors.length > 0)
+        expectedPreview.blockingErrors.length > 0)
     ) {
       return;
     }
@@ -133,11 +143,15 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
           csvText,
           groupNameTemplate,
           syncMode,
+          ...(action === "apply" ? { expectedPreview } : {}),
         }),
       });
       const body = (await response.json()) as UserGroupSyncResponseBody;
 
       if (!body.ok) {
+        if (action === "preview" && latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
+          return;
+        }
         setError(body.error);
         setMessage(null);
         if (action === "preview") {
@@ -163,6 +177,9 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
         setMessage("Apply completed.");
       }
     } catch (caughtError) {
+      if (action === "preview" && latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
+        return;
+      }
       setMessage(null);
       setError(caughtError instanceof Error ? caughtError.message : "Unable to run user group sync.");
       if (action === "preview") {

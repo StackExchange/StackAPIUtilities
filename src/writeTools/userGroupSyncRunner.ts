@@ -71,6 +71,14 @@ export async function previewUserGroupSync(input: UserGroupSyncRunnerInput): Pro
 
 export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promise<UserGroupSyncApplyResult> {
   const preview = await previewUserGroupSync(input);
+
+  return applyUserGroupSyncPlan(preview, input.client);
+}
+
+export async function applyUserGroupSyncPlan(
+  preview: UserGroupSyncPlan,
+  client: UserGroupSyncClient,
+): Promise<UserGroupSyncApplyResult> {
   const operations: UserGroupSyncOperationResult[] = [];
 
   if (preview.blockingErrors.length > 0) {
@@ -83,7 +91,7 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
 
     if (group.createGroup) {
       try {
-        const createdGroup = await input.client.createUserGroup({
+        const createdGroup = await client.createUserGroup({
           name: group.groupName,
           userIds: group.desiredUserIds,
         });
@@ -107,7 +115,7 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
       }
     } else if (userGroupId !== null && group.addUserIds.length > 0) {
       try {
-        await input.client.addUserGroupMembers(userGroupId, group.addUserIds);
+        await client.addUserGroupMembers(userGroupId, group.addUserIds);
         canRemoveUsers = true;
         operations.push({
           kind: "add-members",
@@ -127,10 +135,10 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
       }
     }
 
-    if (input.syncMode === "exact-sync" && userGroupId !== null && canRemoveUsers) {
+    if (preview.syncMode === "exact-sync" && userGroupId !== null && canRemoveUsers) {
       for (const userId of group.removeUserIds) {
         try {
-          await input.client.removeUserGroupMember(userGroupId, userId);
+          await client.removeUserGroupMember(userGroupId, userId);
           operations.push({
             kind: "remove-member",
             groupName: group.groupName,
