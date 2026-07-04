@@ -48,8 +48,15 @@ export interface UserGroupSyncApplyResult {
   operations: UserGroupSyncOperationResult[];
 }
 
+export class UserGroupSyncInputError extends Error {
+  constructor(error: unknown) {
+    super(toErrorMessage(error));
+    this.name = "UserGroupSyncInputError";
+  }
+}
+
 export async function previewUserGroupSync(input: UserGroupSyncRunnerInput): Promise<UserGroupSyncPlan> {
-  const rows = parseUserExportCsv(input.csvText);
+  const rows = parseInputCsv(input.csvText);
   const resolvedUsers = await resolveUsersByEmail(input.client, rows.map((row) => row.email));
   const existingGroups = normalizeExistingGroups(await input.client.getUserGroups());
 
@@ -144,6 +151,14 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
   }
 
   return { preview, operations };
+}
+
+function parseInputCsv(csvText: string) {
+  try {
+    return parseUserExportCsv(csvText);
+  } catch (error) {
+    throw new UserGroupSyncInputError(error);
+  }
 }
 
 async function resolveUsersByEmail(

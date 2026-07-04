@@ -273,6 +273,36 @@ describe("handleUserGroupSyncRequest", () => {
     });
   });
 
+  it("returns a 400 response for malformed quoted CSV", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn(),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+    });
+    const createClientDependency = vi.fn((_credentials: SessionCredentials) => client);
+    const malformedCsvText = [
+      "Director,Senior Manager,User Group Member,First Name,Last Name,Colleague ID,Email,Job Title",
+      'Pat Director,Ada Lovelace,"Grace" Hopper,Grace,Hopper,1001,grace@example.com,Engineer',
+    ].join("\n");
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials,
+        csvText: malformedCsvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: createClientDependency },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        "Trailing quote on quoted field is malformed; Quoted field unterminated; Too few fields: expected 8 fields but parsed 3",
+    });
+  });
+
   it("requires an Enterprise access token or PAT", async () => {
     const response = await handleUserGroupSyncRequest({
       action: "preview",
@@ -366,6 +396,32 @@ describe("handleUserGroupSyncRequest", () => {
     expect(createClientDependency).toHaveBeenCalledWith({
       ...requestCredentials,
       accessToken: "token",
+    });
+  });
+
+  it("returns client failures that look like parser errors as 500 responses", async () => {
+    const parserLikeError =
+      "User export CSV is missing required column(s): Director, User Group Member";
+    const client = createClient({
+      getUserByEmail: vi.fn().mockRejectedValue(new Error(parserLikeError)),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+    });
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: () => client },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: parserLikeError,
     });
   });
 
