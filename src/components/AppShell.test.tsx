@@ -74,7 +74,7 @@ describe("AppShell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "Run Tag Report" }));
+    await user.click(screen.getByRole("button", { name: "Run current period" }));
 
     expect(
       screen.getByText("Add session credentials before running Tag Report."),
@@ -111,10 +111,22 @@ describe("AppShell", () => {
     await user.type(screen.getByLabelText("Access token"), "token");
     await user.click(screen.getByRole("button", { name: "Save session credentials" }));
     await user.click(screen.getByRole("button", { name: "Reports" }));
-    await user.click(screen.getByRole("button", { name: "Run Inactive Users" }));
+    await user.click(screen.getByRole("button", { name: "Run current period" }));
 
     expect(await screen.findByText("Live API run completed for Inactive Users.")).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe("/api/reports/run");
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      reportId: "inactive-users",
+      credentials: {
+        instanceType: "basic-business",
+        baseUrl: "https://stackoverflowteams.com/c/example-team",
+        accessToken: "token",
+      },
+      periodRole: "current",
+      scope: {},
+      pageSize: 100,
+      maxPagesPerDataset: 5,
+    });
     expect(screen.getByText("1 dataset")).toBeInTheDocument();
     expect(screen.getAllByText("users").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Live Records")).toBeInTheDocument();
@@ -153,7 +165,7 @@ describe("AppShell", () => {
     await user.type(screen.getByLabelText("Access token"), "token");
     await user.click(screen.getByRole("button", { name: "Save session credentials" }));
     await user.click(screen.getByRole("button", { name: "Reports" }));
-    await user.click(screen.getByRole("button", { name: "Run Tag Report" }));
+    await user.click(screen.getByRole("button", { name: "Run current period" }));
 
     expect(await screen.findByText("Live API run completed for Tag Report.")).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe("/api/reports/run");

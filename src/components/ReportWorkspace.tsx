@@ -1,20 +1,32 @@
 import { useState } from "react";
 import { reportRegistry } from "../domain/reportRegistry";
-import type { ReportId } from "../domain/types";
+import type { ReportId, ReportRunScope, RunPeriodRole } from "../domain/types";
 import { DataTable } from "./DataTable";
 import { ReportDashboard } from "./ReportDashboard";
-import { RunControls } from "./RunControls";
+import { ReportScopePanel } from "./ReportScopePanel";
 
-interface ReportWorkspaceProps {
+export interface ReportWorkspaceProps {
   reportId: ReportId;
   records: Record<string, unknown>[];
   outputSource?: "live-api" | "upload";
-  onRun: () => void;
+  scope: ReportRunScope;
+  onScopeChange: (scope: ReportRunScope) => void;
+  onRun: (periodRole: RunPeriodRole) => void;
+  onRunBoth: () => void;
 }
 
-export function ReportWorkspace({ reportId, records, outputSource, onRun }: ReportWorkspaceProps) {
+export function ReportWorkspace({
+  reportId,
+  records,
+  outputSource,
+  scope,
+  onScopeChange,
+  onRun,
+  onRunBoth,
+}: ReportWorkspaceProps) {
   const [tab, setTab] = useState<"dashboard" | "table">("dashboard");
   const report = reportRegistry.find((candidate) => candidate.id === reportId)!;
+  const comparisonEnabled = scope.comparison !== undefined;
 
   return (
     <section className="workspace-panel" aria-labelledby="selected-report-heading">
@@ -39,7 +51,34 @@ export function ReportWorkspace({ reportId, records, outputSource, onRun }: Repo
           render full script outputs.
         </p>
       </div>
-      <RunControls reportId={reportId} onRun={onRun} />
+      <ReportScopePanel scope={scope} onChange={onScopeChange} />
+      <div className="run-controls">
+        <button
+          className="s-btn s-btn__filled report-run-primary"
+          type="button"
+          onClick={() => onRun("current")}
+        >
+          Run current period
+        </button>
+        {comparisonEnabled && (
+          <>
+            <button
+              className="s-btn s-btn__outlined report-run-secondary"
+              type="button"
+              onClick={() => onRun("comparison")}
+            >
+              Run comparison period
+            </button>
+            <button
+              className="s-btn s-btn__outlined report-run-secondary"
+              type="button"
+              onClick={onRunBoth}
+            >
+              Run both periods
+            </button>
+          </>
+        )}
+      </div>
       <div className="s-navigation s-navigation__muted report-tabs" role="tablist">
         <button
           className="s-navigation--item"

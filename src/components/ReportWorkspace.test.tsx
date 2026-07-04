@@ -1,15 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_REPORT_RUN_SCOPE } from "../domain/reportScope";
+import type { ReportWorkspaceProps } from "./ReportWorkspace";
 import { ReportWorkspace } from "./ReportWorkspace";
 
 describe("ReportWorkspace", () => {
   it("shows report scope notes, run controls, dashboard tab, and raw table tab", async () => {
     render(
       <ReportWorkspace
+        {...defaultWorkspaceProps()}
         reportId="tag-report"
         records={[{ tagName: "python", totalPageViews: 100 }]}
-        onRun={() => undefined}
       />,
     );
 
@@ -19,7 +21,7 @@ describe("ReportWorkspace", () => {
         "Ready for session credentials. Live API runs collect mapped datasets; uploads render full script outputs.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run Tag Report" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run current period" })).toBeInTheDocument();
     expect(screen.getByText("Page Views")).toBeInTheDocument();
     expect(screen.getAllByText("100")).toHaveLength(2);
     expect(screen.getByText("Top tags by page views")).toBeInTheDocument();
@@ -34,10 +36,10 @@ describe("ReportWorkspace", () => {
   it("summarizes live API output as raw collected datasets", () => {
     render(
       <ReportWorkspace
+        {...defaultWorkspaceProps()}
         reportId="inactive-users"
         records={[{ datasetName: "users", user_id: 1, display_name: "Ada" }]}
         outputSource="live-api"
-        onRun={() => undefined}
       />,
     );
 
@@ -49,10 +51,10 @@ describe("ReportWorkspace", () => {
   it("renders synthetic live interactions with the interactions dashboard", () => {
     render(
       <ReportWorkspace
+        {...defaultWorkspaceProps()}
         reportId="interactions"
         records={[{ datasetName: "interactions", source: "Engineering", target: "Product", weight: 3 }]}
         outputSource="live-api"
-        onRun={() => undefined}
       />,
     );
 
@@ -62,3 +64,15 @@ describe("ReportWorkspace", () => {
     expect(screen.getByText("Product")).toBeInTheDocument();
   });
 });
+
+function defaultWorkspaceProps(): Pick<
+  ReportWorkspaceProps,
+  "scope" | "onScopeChange" | "onRun" | "onRunBoth"
+> {
+  return {
+    scope: DEFAULT_REPORT_RUN_SCOPE,
+    onScopeChange: () => undefined,
+    onRun: () => undefined,
+    onRunBoth: () => undefined,
+  };
+}

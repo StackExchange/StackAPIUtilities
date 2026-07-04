@@ -9,22 +9,24 @@ import { RunStatus } from "./components/RunStatus";
 import { SessionOverview } from "./components/SessionOverview";
 import { UploadsPanel, type ImportedUploadResult } from "./components/UploadsPanel";
 import { validateCredentialsForReport } from "./credentials/credentialRules";
+import { DEFAULT_REPORT_RUN_SCOPE } from "./domain/reportScope";
 import { reportRegistry } from "./domain/reportRegistry";
 import { createInitialSessionState, sessionReducer } from "./domain/sessionStore";
-import type { ReportId, RunQueueItem } from "./domain/types";
+import type { ReportId, RunPeriodRole, RunQueueItem } from "./domain/types";
 import type { ReportRunResponseBody } from "./server/reportRunApi";
 
 export function App() {
   const [state, dispatch] = useReducer(sessionReducer, undefined, createInitialSessionState);
   const [activePanel, setActivePanel] = useState<AppPanel>("report");
   const [runQueue, setRunQueue] = useState<RunQueueItem[]>([]);
+  const [reportScope, setReportScope] = useState(DEFAULT_REPORT_RUN_SCOPE);
 
   function selectReport(reportId: ReportId) {
     dispatch({ type: "report/select", reportId });
     setActivePanel("report");
   }
 
-  async function queueSelectedReportRun() {
+  async function queueSelectedReportRun(periodRole: RunPeriodRole = "current") {
     const report = reportRegistry.find((candidate) => candidate.id === state.selectedReportId)!;
     if (!state.credentials) {
       setRunQueue([
@@ -58,11 +60,12 @@ export function App() {
         id: `${state.selectedReportId}-live-running`,
         reportId: state.selectedReportId,
         status: "running",
-        message: `Running ${report.title} live API collection...`,
+        message: `Running ${report.title} ${periodRole} period live API collection...`,
       },
     ]);
 
     try {
+      const periodScope = periodRole === "comparison" ? reportScope.comparison ?? {} : reportScope.current;
       const response = await fetch("/api/reports/run", {
         method: "POST",
         headers: {
@@ -71,6 +74,10 @@ export function App() {
         body: JSON.stringify({
           reportId: state.selectedReportId,
           credentials: state.credentials,
+          periodRole,
+          scope: periodScope,
+          pageSize: reportScope.pageSize,
+          maxPagesPerDataset: reportScope.maxPagesPerDataset,
         }),
       });
       const body = (await response.json()) as ReportRunResponseBody;
@@ -105,6 +112,13 @@ export function App() {
           message: getLiveRunErrorMessage(error, report.title),
         },
       ]);
+    }
+  }
+
+  async function queueBothReportRuns() {
+    await queueSelectedReportRun("current");
+    if (reportScope.comparison) {
+      await queueSelectedReportRun("comparison");
     }
   }
 
@@ -157,7 +171,10 @@ export function App() {
           reportId={state.selectedReportId}
           records={selectedReportRecords}
           outputSource={selectedReportOutput?.source}
+          scope={reportScope}
+          onScopeChange={setReportScope}
           onRun={queueSelectedReportRun}
+          onRunBoth={queueBothReportRuns}
         />
       )}
     </AppShell>
