@@ -72,6 +72,7 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
 
   for (const group of preview.groups) {
     let userGroupId = group.existingGroupId;
+    let canRemoveUsers = group.addUserIds.length === 0;
 
     if (group.createGroup) {
       try {
@@ -80,6 +81,7 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
           userIds: group.desiredUserIds,
         });
         userGroupId = createdGroup.id;
+        canRemoveUsers = true;
         operations.push({
           kind: "create-group",
           groupName: group.groupName,
@@ -99,6 +101,7 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
     } else if (userGroupId !== null && group.addUserIds.length > 0) {
       try {
         await input.client.addUserGroupMembers(userGroupId, group.addUserIds);
+        canRemoveUsers = true;
         operations.push({
           kind: "add-members",
           groupName: group.groupName,
@@ -113,10 +116,11 @@ export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promi
           status: "failed",
           error: toErrorMessage(error),
         });
+        canRemoveUsers = false;
       }
     }
 
-    if (input.syncMode === "exact-sync" && userGroupId !== null) {
+    if (input.syncMode === "exact-sync" && userGroupId !== null && canRemoveUsers) {
       for (const userId of group.removeUserIds) {
         try {
           await input.client.removeUserGroupMember(userGroupId, userId);
