@@ -18,6 +18,11 @@ describe("ReportWorkspace", () => {
       screen.getByText("Session-only credentials required before live API runs."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run Tag Report" })).toBeInTheDocument();
+    expect(screen.getByText("Page Views")).toBeInTheDocument();
+    expect(screen.getAllByText("100")).toHaveLength(2);
+    expect(screen.getByText("Top tags by page views")).toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dashboard cards and charts render here when data is loaded.")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("tab", { name: "Raw Table" }));
 

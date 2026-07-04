@@ -3,7 +3,7 @@ import { summarizeCommunityMembers } from "./communityMembers";
 import { summarizeDataExport } from "./dataExport";
 import { summarizeInactiveUsers } from "./inactiveUsers";
 import { buildInteractionSummary } from "./interactions";
-import { summarizeTags } from "./tagReport";
+import { summarizeTags, type TagMetricRow } from "./tagReport";
 import { summarizeUsers } from "./userReport";
 
 describe("report transforms", () => {
@@ -20,6 +20,12 @@ describe("report transforms", () => {
     const summary = summarizeTags([]);
     expect(summary.metricCards).toContainEqual({ label: "Tags", value: 0 });
     expect(summary.topTagsByViews).toEqual([]);
+  });
+
+  it("treats missing tag metric numbers as zero", () => {
+    const summary = summarizeTags([{ tagName: "python", totalPageViews: 100 } as TagMetricRow]);
+
+    expect(summary.metricCards).toContainEqual({ label: "Questions", value: 0 });
   });
 
   it("does not mutate tag metric inputs while sorting", () => {

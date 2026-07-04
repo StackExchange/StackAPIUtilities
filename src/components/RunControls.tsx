@@ -11,11 +11,11 @@ export function RunControls({ reportId, onRun }: RunControlsProps) {
 
   return (
     <div className="run-controls">
-      <button className="s-btn s-btn__primary" type="button" onClick={onRun}>
+      <button className="s-btn s-btn__filled" type="button" onClick={onRun}>
         Run {report.title}
       </button>
       <button
-        className="s-btn s-btn__muted"
+        className="s-btn s-btn__outlined s-btn__muted"
         type="button"
         disabled
         title="Batch report runs arrive after report selection controls."

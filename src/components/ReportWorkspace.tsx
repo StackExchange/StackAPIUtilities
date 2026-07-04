@@ -2,6 +2,7 @@ import { useState } from "react";
 import { reportRegistry } from "../domain/reportRegistry";
 import type { ReportId } from "../domain/types";
 import { DataTable } from "./DataTable";
+import { ReportDashboard } from "./ReportDashboard";
 import { RunControls } from "./RunControls";
 
 interface ReportWorkspaceProps {
@@ -48,9 +49,7 @@ export function ReportWorkspace({ reportId, records, onRun }: ReportWorkspacePro
         </button>
       </div>
       {tab === "dashboard" ? (
-        <div className="dashboard-placeholder">
-          Dashboard cards and charts render here when data is loaded.
-        </div>
+        <ReportDashboard reportId={reportId} records={records} />
       ) : (
         <div className="raw-table-panel">
           <DataTable records={records} />
