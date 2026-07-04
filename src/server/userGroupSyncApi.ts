@@ -1,5 +1,5 @@
 import { StackApiV3Client } from "../api/stackApiV3";
-import { normalizeInstanceUrl } from "../credentials/credentialRules";
+import { normalizeInstanceUrl, type NormalizedInstance } from "../credentials/credentialRules";
 import type { SessionCredentials } from "../domain/types";
 import {
   applyUserGroupSync,
@@ -33,7 +33,18 @@ export async function handleUserGroupSyncRequest(
     return jsonResponse({ ok: false, error: "User group sync request is invalid." }, 400);
   }
 
-  if (payload.credentials.instanceType !== "enterprise") {
+  const normalizedInstance = normalizeRequestInstance(payload.credentials.baseUrl);
+  if (normalizedInstance === null) {
+    return jsonResponse(
+      { ok: false, error: "Enterprise user group sync requires a valid instance URL." },
+      400,
+    );
+  }
+
+  if (
+    payload.credentials.instanceType !== "enterprise" ||
+    normalizedInstance.instanceType !== "enterprise"
+  ) {
     return jsonResponse(
       { ok: false, error: "Enterprise user group sync requires Enterprise session credentials." },
       400,
@@ -48,7 +59,9 @@ export async function handleUserGroupSyncRequest(
   }
 
   try {
-    const client = (dependencies.createClient ?? createStackApiV3Client)(payload.credentials);
+    const client = dependencies.createClient
+      ? dependencies.createClient(payload.credentials)
+      : createStackApiV3Client(payload.credentials, normalizedInstance);
     const runnerInput = {
       csvText: payload.csvText,
       groupNameTemplate: payload.groupNameTemplate,
@@ -69,13 +82,22 @@ export async function handleUserGroupSyncRequest(
   }
 }
 
-function createStackApiV3Client(credentials: SessionCredentials): StackApiV3Client {
-  const normalizedInstance = normalizeInstanceUrl(credentials.baseUrl);
-
+function createStackApiV3Client(
+  credentials: SessionCredentials,
+  normalizedInstance: NormalizedInstance,
+): StackApiV3Client {
   return new StackApiV3Client({
     apiV3Url: normalizedInstance.apiV3Url,
     token: credentials.accessToken ?? credentials.pat ?? "",
   });
+}
+
+function normalizeRequestInstance(baseUrl: string): NormalizedInstance | null {
+  try {
+    return normalizeInstanceUrl(baseUrl);
+  } catch {
+    return null;
+  }
 }
 
 function isUserGroupSyncRequestPayload(value: unknown): value is UserGroupSyncRequestPayload {
