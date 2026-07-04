@@ -1,14 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const host = "127.0.0.1";
+const port = process.env.PORT ?? "5180";
+const baseURL = `http://${host}:${port}`;
+
 export default defineConfig({
   testDir: "./e2e",
   use: {
-    baseURL: "http://127.0.0.1:5180",
+    baseURL,
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "pnpm exec next dev -H 127.0.0.1 -p 5180",
-    url: "http://127.0.0.1:5180",
+    command: `./node_modules/.bin/next dev -H ${host} -p ${port}`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
   },
   projects: [
