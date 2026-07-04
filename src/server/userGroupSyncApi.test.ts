@@ -63,6 +63,56 @@ describe("handleUserGroupSyncRequest", () => {
     });
   });
 
+  it("rejects enterprise credentials with a Basic/Business URL", async () => {
+    const createClient = vi.fn();
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: {
+          ...credentials,
+          baseUrl: "https://stackoverflowteams.com/c/team",
+        },
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Enterprise user group sync requires Enterprise session credentials.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 response for malformed instance URLs", async () => {
+    const createClient = vi.fn();
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: {
+          ...credentials,
+          baseUrl: "not a url",
+        },
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Enterprise user group sync requires a valid instance URL.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
   it("applies changes through the runner", async () => {
     const client = createClient({
       getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
