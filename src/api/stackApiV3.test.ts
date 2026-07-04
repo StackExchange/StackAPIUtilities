@@ -132,6 +132,7 @@ describe("StackApiV3Client", () => {
     await expect(client.addUserGroupMembers(7, [3])).resolves.toEqual(
       expect.objectContaining({ id: 7, name: "Ada Lovelace VRM" }),
     );
+    expect(fetchMock.mock.calls[0][0].toString()).toBe("https://demo.stackenterprise.co/api/v3/user-groups");
     expect(fetchMock.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         method: "POST",
@@ -145,6 +146,7 @@ describe("StackApiV3Client", () => {
     expect(fetchMock.mock.calls[1][1]).toEqual(
       expect.objectContaining({
         method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer token", "Content-Type": "application/json" }),
         body: JSON.stringify([3]),
       }),
     );
