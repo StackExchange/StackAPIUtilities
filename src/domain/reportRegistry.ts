@@ -43,7 +43,7 @@ export const reportRegistry: readonly ReportMetadata[] = [
     supportedInstances: ["basic-business", "enterprise"],
     capabilities: ["live-api", "upload"],
     credentialRequirements: ["access-token", "api-key"],
-    requiredDatasets: ["users", "questions", "interactions"],
+    requiredDatasets: ["users", "questions", "answers", "comments"],
   },
   {
     id: "community-members",

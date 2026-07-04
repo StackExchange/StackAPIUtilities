@@ -45,4 +45,20 @@ describe("ReportWorkspace", () => {
     expect(screen.getByText("Live datasets")).toBeInTheDocument();
     expect(screen.getByLabelText("users: 1")).toBeInTheDocument();
   });
+
+  it("renders synthetic live interactions with the interactions dashboard", () => {
+    render(
+      <ReportWorkspace
+        reportId="interactions"
+        records={[{ datasetName: "interactions", source: "Engineering", target: "Product", weight: 3 }]}
+        outputSource="live-api"
+        onRun={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Interaction Weight")).toBeInTheDocument();
+    expect(screen.getByText("Top interactions")).toBeInTheDocument();
+    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    expect(screen.getByText("Product")).toBeInTheDocument();
+  });
 });

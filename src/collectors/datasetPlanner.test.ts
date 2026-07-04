@@ -36,6 +36,15 @@ describe("planDatasetsForReports", () => {
       "comments",
     ]);
   });
+
+  it("plans concrete content datasets for Interactions live runs", () => {
+    expect(planDatasetsForReports(["interactions"])).toEqual([
+      "users",
+      "questions",
+      "answers",
+      "comments",
+    ]);
+  });
 });
 
 describe("collectDataset", () => {

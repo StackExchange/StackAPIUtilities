@@ -26,6 +26,14 @@ export function ReportDashboard({ reportId, records, outputSource }: ReportDashb
     );
   }
 
+  if (outputSource === "live-api" && reportId === "interactions") {
+    const liveInteractions = records.filter((record) => record.datasetName === "interactions");
+
+    if (liveInteractions.length > 0) {
+      return renderInteractionsDashboard(liveInteractions as unknown as InteractionEdge[]);
+    }
+  }
+
   if (outputSource === "live-api") {
     const datasetCounts = countBy(records, (record) => String(record.datasetName ?? "unknown"));
 
@@ -112,21 +120,7 @@ export function ReportDashboard({ reportId, records, outputSource }: ReportDashb
   }
 
   if (reportId === "interactions") {
-    const summary = buildInteractionSummary(records as unknown as InteractionEdge[]);
-
-    return (
-      <DashboardLayout
-        cards={[
-          { label: "Departments", value: summary.nodes.length },
-          { label: "Interaction Weight", value: summary.totalInteractions },
-          { label: "Edges", value: summary.edges.length },
-        ]}
-      >
-        <DashboardSection title="Top interactions">
-          <InteractionMatrix edges={summary.topEdges} />
-        </DashboardSection>
-      </DashboardLayout>
-    );
+    return renderInteractionsDashboard(records as unknown as InteractionEdge[]);
   }
 
   if (reportId === "community-members") {
@@ -160,6 +154,24 @@ export function ReportDashboard({ reportId, records, outputSource }: ReportDashb
   }
 
   return <DashboardLayout cards={[{ label: "Records", value: records.length }]} />;
+}
+
+function renderInteractionsDashboard(records: InteractionEdge[]) {
+  const summary = buildInteractionSummary(records);
+
+  return (
+    <DashboardLayout
+      cards={[
+        { label: "Departments", value: summary.nodes.length },
+        { label: "Interaction Weight", value: summary.totalInteractions },
+        { label: "Edges", value: summary.edges.length },
+      ]}
+    >
+      <DashboardSection title="Top interactions">
+        <InteractionMatrix edges={summary.topEdges} />
+      </DashboardSection>
+    </DashboardLayout>
+  );
 }
 
 function DashboardLayout({

@@ -72,4 +72,57 @@ describe("runLiveReport", () => {
     ]);
     expect(result.messages).toContain("Collected comments (1 record) for Data Export.");
   });
+
+  it("builds Interactions from live content datasets", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString();
+      const items = itemsForInteractionsUrl(url);
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ items, has_more: false }), {
+          status: 200,
+        }),
+      );
+    });
+
+    const result = await runLiveReport("interactions", basicCredentials, {
+      fetchFn: fetchMock,
+    });
+
+    expect(result.datasets.map((dataset) => dataset.datasetName)).toEqual([
+      "users",
+      "questions",
+      "answers",
+      "comments",
+      "interactions",
+    ]);
+    expect(result.datasets.find((dataset) => dataset.datasetName === "interactions")?.records).toEqual([
+      { source: "Engineering", target: "Product", weight: 1 },
+      { source: "Support", target: "Engineering", weight: 1 },
+    ]);
+  });
 });
+
+function itemsForInteractionsUrl(url: string): Record<string, unknown>[] {
+  if (url.includes("/users")) {
+    return [
+      { user_id: 1, department: "Engineering" },
+      { user_id: 2, department: "Product" },
+      { user_id: 3, department: "Support" },
+    ];
+  }
+
+  if (url.includes("/questions")) {
+    return [{ question_id: 10, owner: { user_id: 2 } }];
+  }
+
+  if (url.includes("/answers")) {
+    return [{ answer_id: 100, question_id: 10, owner: { user_id: 1 } }];
+  }
+
+  if (url.includes("/comments")) {
+    return [{ comment_id: 200, post_id: 100, owner: { user_id: 3 } }];
+  }
+
+  return [];
+}

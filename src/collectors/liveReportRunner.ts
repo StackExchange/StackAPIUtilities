@@ -4,6 +4,7 @@ import type { FetchLike, ThrottleNotice } from "../api/httpClient";
 import { normalizeInstanceUrl } from "../credentials/credentialRules";
 import { reportRegistry } from "../domain/reportRegistry";
 import type { DatasetName, ReportId, SessionCredentials } from "../domain/types";
+import { buildInteractionEdgesFromLiveContent } from "../reports/interactions";
 import { planDatasetsForReports } from "./datasetPlanner";
 import { collectDataset, getUnsupportedLiveDatasets, type LiveCollectorClients } from "./liveCollectors";
 
@@ -64,15 +65,47 @@ export async function runLiveReport(
     datasets.push({ datasetName, records: toRecordList(records) });
   }
 
+  datasets.push(...buildSyntheticDatasets(reportId, datasets));
+
   return {
     reportId,
     reportTitle: report.title,
     datasets,
-    messages: datasets.map(
-      (dataset) =>
-        `Collected ${dataset.datasetName} (${formatRecordCount(dataset.records.length)}) for ${report.title}.`,
-    ),
+    messages: datasets.map((dataset) => formatDatasetMessage(reportId, report.title, dataset)),
   };
+}
+
+function buildSyntheticDatasets(
+  reportId: ReportId,
+  datasets: LiveReportDataset[],
+): LiveReportDataset[] {
+  if (reportId !== "interactions") {
+    return [];
+  }
+
+  const recordsByDataset = new Map(datasets.map((dataset) => [dataset.datasetName, dataset.records]));
+
+  return [
+    {
+      datasetName: "interactions",
+      records: buildInteractionEdgesFromLiveContent({
+        users: recordsByDataset.get("users") ?? [],
+        questions: recordsByDataset.get("questions") ?? [],
+        answers: recordsByDataset.get("answers") ?? [],
+        comments: recordsByDataset.get("comments") ?? [],
+      }).map((edge) => ({ ...edge })),
+    },
+  ];
+}
+
+function formatDatasetMessage(
+  reportId: ReportId,
+  reportTitle: string,
+  dataset: LiveReportDataset,
+): string {
+  const verb = reportId === "interactions" && dataset.datasetName === "interactions" ? "Built" : "Collected";
+
+  return `${verb} ${dataset.datasetName} (${formatRecordCount(dataset.records.length)}) for ${reportTitle}.`;
 }
 
 function createLiveCollectorClients(
