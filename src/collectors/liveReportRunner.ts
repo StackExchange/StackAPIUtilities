@@ -2,8 +2,16 @@ import { StackApiV2Client } from "../api/stackApiV2";
 import { StackApiV3Client } from "../api/stackApiV3";
 import type { FetchLike, ThrottleNotice } from "../api/httpClient";
 import { normalizeInstanceUrl } from "../credentials/credentialRules";
+import { DEFAULT_REPORT_RUN_SCOPE } from "../domain/reportScope";
 import { reportRegistry } from "../domain/reportRegistry";
-import type { DatasetName, ReportId, SessionCredentials } from "../domain/types";
+import type {
+  DatasetName,
+  PeriodScope,
+  ReportId,
+  ReportWarning,
+  RunPeriodRole,
+  SessionCredentials,
+} from "../domain/types";
 import { buildInteractionEdgesFromLiveContent } from "../reports/interactions";
 import { planDatasetsForReports } from "./datasetPlanner";
 import { collectDataset, getUnsupportedLiveDatasets, type LiveCollectorClients } from "./liveCollectors";
@@ -16,13 +24,22 @@ export interface LiveReportDataset {
 export interface LiveReportRunResult {
   reportId: ReportId;
   reportTitle: string;
+  periodRole: RunPeriodRole;
+  scope: PeriodScope;
+  pageSize: number;
+  maxPagesPerDataset: number;
   datasets: LiveReportDataset[];
   messages: string[];
+  warnings: ReportWarning[];
 }
 
 export interface LiveReportRunOptions {
   fetchFn?: FetchLike;
   onThrottle?: (notice: ThrottleNotice) => void | Promise<void>;
+  periodRole?: RunPeriodRole;
+  scope?: PeriodScope;
+  pageSize?: number;
+  maxPagesPerDataset?: number;
 }
 
 export class UnsupportedLiveReportRunError extends Error {
@@ -60,10 +77,20 @@ export async function runLiveReport(
   const clients = createLiveCollectorClients(credentials, options);
   const datasets: LiveReportDataset[] = [];
   const collectedDatasets: Partial<Record<DatasetName, Record<string, unknown>[]>> = {};
+  const periodRole = options.periodRole ?? "current";
+  const scope = options.scope ?? DEFAULT_REPORT_RUN_SCOPE.current;
+  const pageSize = options.pageSize ?? DEFAULT_REPORT_RUN_SCOPE.pageSize;
+  const maxPagesPerDataset = options.maxPagesPerDataset ?? DEFAULT_REPORT_RUN_SCOPE.maxPagesPerDataset;
 
   for (const datasetName of plannedDatasets) {
     const records = toRecordList(
-      await collectDataset(datasetName, clients, { collectedDatasets }),
+      await collectDataset(datasetName, clients, {
+        collectedDatasets,
+        periodRole,
+        scope,
+        pageSize,
+        maxPagesPerDataset,
+      }),
     );
     collectedDatasets[datasetName] = records;
     datasets.push({ datasetName, records });
@@ -74,8 +101,13 @@ export async function runLiveReport(
   return {
     reportId,
     reportTitle: report.title,
+    periodRole,
+    scope,
+    pageSize,
+    maxPagesPerDataset,
     datasets,
     messages: datasets.map((dataset) => formatDatasetMessage(reportId, report.title, dataset)),
+    warnings: [],
   };
 }
 

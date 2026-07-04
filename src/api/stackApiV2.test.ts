@@ -23,6 +23,21 @@ describe("StackApiV2Client", () => {
     expect(fetchMock.mock.calls[1][0].toString()).toContain("page=2");
   });
 
+  it("stops pagination at the requested max pages", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 1 }], has_more: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 2 }], has_more: true }), { status: 200 }));
+
+    const client = new StackApiV2Client({
+      apiV2Url: "https://api.stackoverflowteams.com/2.3",
+      teamSlug: "example-team",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.getPagedItems("/users", { pagesize: "50" }, { maxPages: 1 })).resolves.toEqual([{ id: 1 }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("throws a mapped error on non-200 responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("bad key", { status: 400 }));
     const client = new StackApiV2Client({

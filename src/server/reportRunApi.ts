@@ -1,15 +1,26 @@
 import { runLiveReport, type LiveReportRunResult } from "../collectors/liveReportRunner";
-import type { ReportId, SessionCredentials } from "../domain/types";
+import { DEFAULT_REPORT_RUN_SCOPE, validateReportRunScope } from "../domain/reportScope";
+import type { PeriodScope, ReportId, RunPeriodRole, SessionCredentials } from "../domain/types";
 
 interface ReportRunRequestPayload {
   reportId: ReportId;
   credentials: SessionCredentials;
+  periodRole?: RunPeriodRole;
+  scope?: PeriodScope;
+  pageSize?: number;
+  maxPagesPerDataset?: number;
 }
 
 interface ReportRunDependencies {
   runLiveReport?: (
     reportId: ReportId,
     credentials: SessionCredentials,
+    options: {
+      periodRole: RunPeriodRole;
+      scope: PeriodScope;
+      pageSize: number;
+      maxPagesPerDataset: number;
+    },
   ) => Promise<LiveReportRunResult>;
 }
 
@@ -28,10 +39,30 @@ export async function handleReportRunRequest(
     );
   }
 
+  const periodRole = payload.periodRole ?? "current";
+  const scope = payload.scope ?? {};
+  const pageSize = payload.pageSize ?? DEFAULT_REPORT_RUN_SCOPE.pageSize;
+  const maxPagesPerDataset = payload.maxPagesPerDataset ?? DEFAULT_REPORT_RUN_SCOPE.maxPagesPerDataset;
+  const validation = validateReportRunScope({
+    current: scope,
+    pageSize,
+    maxPagesPerDataset,
+  });
+
+  if (!validation.valid) {
+    return jsonResponse({ ok: false, error: validation.messages.join(" ") }, 400);
+  }
+
   try {
     const result = await (dependencies.runLiveReport ?? runLiveReport)(
       payload.reportId,
       payload.credentials,
+      {
+        periodRole,
+        scope,
+        pageSize,
+        maxPagesPerDataset,
+      },
     );
 
     return jsonResponse({ ok: true, result }, 200);
@@ -45,6 +76,14 @@ export async function handleReportRunRequest(
 
 function isReportRunRequestPayload(value: unknown): value is ReportRunRequestPayload {
   if (!isRecord(value) || typeof value.reportId !== "string" || !isRecord(value.credentials)) {
+    return false;
+  }
+
+  if (value.periodRole !== undefined && value.periodRole !== "current" && value.periodRole !== "comparison") {
+    return false;
+  }
+
+  if (value.scope !== undefined && !isRecord(value.scope)) {
     return false;
   }
 

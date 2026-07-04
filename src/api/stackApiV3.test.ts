@@ -21,6 +21,21 @@ describe("StackApiV3Client", () => {
     expect(fetchMock.mock.calls[1][0].toString()).toContain("page=2");
   });
 
+  it("stops pagination at the requested max pages", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: "a" }], totalPages: 2 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: "b" }], totalPages: 2 }), { status: 200 }));
+
+    const client = new StackApiV3Client({
+      apiV3Url: "https://api.stackoverflowteams.com/v3/teams/example-team",
+      token: "token",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.getPagedItems("/tags", {}, { maxPages: 1 })).resolves.toEqual([{ id: "a" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("calls the throttle callback when token bucket is low", async () => {
     const wait = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue(

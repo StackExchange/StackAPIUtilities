@@ -34,6 +34,32 @@ describe("runLiveReport", () => {
     expect(fetchMock.mock.calls[0][0].toString()).toContain("team=example-team");
   });
 
+  it("passes scoped period and volume limits to live dataset requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [{ user_id: 1, display_name: "Ada" }], has_more: true }), {
+        status: 200,
+      }),
+    );
+
+    const result = await runLiveReport("inactive-users", basicCredentials, {
+      periodRole: "current",
+      scope: { startDate: "2026-01-01", endDate: "2026-01-31" },
+      pageSize: 50,
+      maxPagesPerDataset: 1,
+      fetchFn: fetchMock,
+    });
+
+    expect(result.periodRole).toBe("current");
+    expect(result.scope).toEqual({ startDate: "2026-01-01", endDate: "2026-01-31" });
+    expect(result.pageSize).toBe(50);
+    expect(result.maxPagesPerDataset).toBe(1);
+    expect(result.warnings).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0].toString()).toContain("pagesize=50");
+    expect(fetchMock.mock.calls[0][0].toString()).toContain("fromdate=1767225600");
+    expect(fetchMock.mock.calls[0][0].toString()).toContain("todate=1769817600");
+  });
+
   it("runs Tag Report by collecting tag SME records from tags", async () => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) =>
       Promise.resolve(

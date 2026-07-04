@@ -15,6 +15,10 @@ interface StackApiV2Page<T> {
   quota_remaining?: number;
 }
 
+interface PagingOptions {
+  maxPages?: number;
+}
+
 export class StackApiV2Client {
   private readonly apiV2Url: string;
   private readonly teamSlug: string | null;
@@ -30,12 +34,17 @@ export class StackApiV2Client {
     this.onThrottle = options.onThrottle;
   }
 
-  async getPagedItems<T = unknown>(path: string, query: Record<string, string> = {}): Promise<T[]> {
+  async getPagedItems<T = unknown>(
+    path: string,
+    query: Record<string, string> = {},
+    options: PagingOptions = {},
+  ): Promise<T[]> {
     const items: T[] = [];
     let page = 1;
     let hasMore = true;
+    const maxPages = options.maxPages ?? Number.POSITIVE_INFINITY;
 
-    while (hasMore) {
+    while (hasMore && page <= maxPages) {
       const url = this.buildUrl(path, { ...query, page: String(page) });
       const response = await this.fetchFn(url, { headers: this.headers });
       const body = await readJsonResponse<StackApiV2Page<T>>(response, "Stack API v2.3");

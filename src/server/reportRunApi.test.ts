@@ -15,6 +15,10 @@ describe("handleReportRunRequest", () => {
     const result: LiveReportRunResult = {
       reportId: "inactive-users",
       reportTitle: "Inactive Users",
+      periodRole: "current",
+      scope: {},
+      pageSize: 100,
+      maxPagesPerDataset: 5,
       datasets: [
         {
           datasetName: "users",
@@ -22,17 +26,30 @@ describe("handleReportRunRequest", () => {
         },
       ],
       messages: ["Collected users (1 record) for Inactive Users."],
+      warnings: [],
     };
     const runLiveReport = vi.fn().mockResolvedValue(result);
 
     const response = await handleReportRunRequest(
-      { reportId: "inactive-users", credentials },
+      {
+        reportId: "inactive-users",
+        credentials,
+        periodRole: "current",
+        scope: {},
+        pageSize: 100,
+        maxPagesPerDataset: 5,
+      },
       { runLiveReport },
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true, result });
-    expect(runLiveReport).toHaveBeenCalledWith("inactive-users", credentials);
+    expect(runLiveReport).toHaveBeenCalledWith("inactive-users", credentials, {
+      periodRole: "current",
+      scope: {},
+      pageSize: 100,
+      maxPagesPerDataset: 5,
+    });
   });
 
   it("returns a 400 response for invalid request payloads", async () => {
@@ -44,6 +61,30 @@ describe("handleReportRunRequest", () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: "Report run request requires a reportId and credentials.",
+    });
+    expect(runLiveReport).not.toHaveBeenCalled();
+  });
+
+  it("returns a 400 response for invalid scope payloads", async () => {
+    const runLiveReport = vi.fn();
+
+    const response = await handleReportRunRequest(
+      {
+        reportId: "inactive-users",
+        credentials,
+        periodRole: "current",
+        scope: { startDate: "2026-04-30", endDate: "2026-04-01" },
+        pageSize: 0,
+        maxPagesPerDataset: 0,
+      },
+      { runLiveReport },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        "Page size must be between 1 and 100. Max pages per dataset must be at least 1. Current period end date must be on or after its start date.",
     });
     expect(runLiveReport).not.toHaveBeenCalled();
   });

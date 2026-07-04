@@ -1,4 +1,5 @@
-import type { DatasetName } from "../domain/types";
+import { dateToUnixSeconds } from "../domain/reportScope";
+import type { DatasetName, PeriodScope, RunPeriodRole } from "../domain/types";
 
 export interface LiveCollectorClients {
   v2: DatasetClient;
@@ -6,11 +7,19 @@ export interface LiveCollectorClients {
 }
 
 export interface DatasetClient {
-  getPagedItems(path: string, query?: Record<string, string>): Promise<unknown[]>;
+  getPagedItems(
+    path: string,
+    query?: Record<string, string>,
+    options?: { maxPages?: number },
+  ): Promise<unknown[]>;
 }
 
 export interface LiveCollectorContext {
   collectedDatasets?: Partial<Record<DatasetName, Record<string, unknown>[]>>;
+  periodRole?: RunPeriodRole;
+  scope?: PeriodScope;
+  pageSize?: number;
+  maxPagesPerDataset?: number;
 }
 
 interface LiveDatasetEndpoint {
@@ -51,11 +60,11 @@ export async function collectDataset(
   context: LiveCollectorContext = {},
 ): Promise<unknown[]> {
   if (dataset === "tagSmes") {
-    return collectTagSmes(clients, getCollectedDataset(context, "tags"));
+    return collectTagSmes(clients, getCollectedDataset(context, "tags"), context);
   }
 
   if (dataset === "reputationHistory") {
-    return collectReputationHistory(clients, getCollectedDataset(context, "users"));
+    return collectReputationHistory(clients, getCollectedDataset(context, "users"), context);
   }
 
   const endpoint = liveDatasetEndpoints[dataset];
@@ -64,19 +73,27 @@ export async function collectDataset(
     throw new UnsupportedLiveDatasetError(dataset);
   }
 
-  return clients[endpoint.client].getPagedItems(endpoint.path, { pagesize: "100" });
+  return getPagedItems(
+    clients[endpoint.client],
+    endpoint.path,
+    buildDatasetQuery(context, endpoint.client === "v2"),
+    context,
+  );
 }
 
 async function collectTagSmes(
   clients: LiveCollectorClients,
   tags: Record<string, unknown>[],
+  context: LiveCollectorContext,
 ): Promise<Record<string, unknown>[]> {
   const records: Record<string, unknown>[] = [];
 
   for (const tagName of uniqueValues(tags.map(getTagName))) {
-    const tagScores = await clients.v2.getPagedItems(
+    const tagScores = await getPagedItems(
+      clients.v2,
       `/tags/${encodeURIComponent(tagName)}/top-answerers/all_time`,
-      { pagesize: "100" },
+      buildDatasetQuery(context, false),
+      context,
     );
 
     records.push(...toRecordList(tagScores).map((record) => ({ tagName, ...record })));
@@ -88,20 +105,59 @@ async function collectTagSmes(
 async function collectReputationHistory(
   clients: LiveCollectorClients,
   users: Record<string, unknown>[],
+  context: LiveCollectorContext,
 ): Promise<Record<string, unknown>[]> {
   const records: Record<string, unknown>[] = [];
   const userIds = uniqueValues(users.map((user) => getNumberField(user, "user_id", "userId", "id")));
 
   for (const userIdBatch of chunk(userIds, 100)) {
-    const reputationEvents = await clients.v2.getPagedItems(
+    const reputationEvents = await getPagedItems(
+      clients.v2,
       `/users/${userIdBatch.join(";")}/reputation-history`,
-      { pagesize: "100" },
+      buildDatasetQuery(context, true),
+      context,
     );
 
     records.push(...toRecordList(reputationEvents));
   }
 
   return records;
+}
+
+function getPagedItems(
+  client: DatasetClient,
+  path: string,
+  query: Record<string, string>,
+  context: LiveCollectorContext,
+): Promise<unknown[]> {
+  if (typeof context.maxPagesPerDataset === "number") {
+    return client.getPagedItems(path, query, { maxPages: context.maxPagesPerDataset });
+  }
+
+  return client.getPagedItems(path, query);
+}
+
+function buildDatasetQuery(
+  context: LiveCollectorContext,
+  includeDateScope: boolean,
+): Record<string, string> {
+  const query: Record<string, string> = {
+    pagesize: String(context.pageSize ?? 100),
+  };
+
+  if (!includeDateScope) {
+    return query;
+  }
+
+  if (context.scope?.startDate) {
+    query.fromdate = String(dateToUnixSeconds(context.scope.startDate));
+  }
+
+  if (context.scope?.endDate) {
+    query.todate = String(dateToUnixSeconds(context.scope.endDate));
+  }
+
+  return query;
 }
 
 function getCollectedDataset(

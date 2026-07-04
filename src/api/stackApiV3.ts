@@ -12,6 +12,10 @@ interface StackApiV3Page<T> {
   totalPages?: number;
 }
 
+interface PagingOptions {
+  maxPages?: number;
+}
+
 const TOKEN_BUCKET_LOW_WATERMARK = 30;
 
 export class StackApiV3Client {
@@ -27,10 +31,15 @@ export class StackApiV3Client {
     this.onThrottle = options.onThrottle;
   }
 
-  async getPagedItems<T = unknown>(path: string, query: Record<string, string> = {}): Promise<T[]> {
+  async getPagedItems<T = unknown>(
+    path: string,
+    query: Record<string, string> = {},
+    options: PagingOptions = {},
+  ): Promise<T[]> {
     const items: T[] = [];
     let page = 1;
     let totalPages = 1;
+    const maxPages = options.maxPages ?? Number.POSITIVE_INFINITY;
 
     do {
       const url = this.buildUrl(path, { ...query, page: String(page) });
@@ -47,7 +56,7 @@ export class StackApiV3Client {
       await this.notifyThrottle(response.headers);
 
       page += 1;
-    } while (page <= totalPages);
+    } while (page <= totalPages && page <= maxPages);
 
     return items;
   }
