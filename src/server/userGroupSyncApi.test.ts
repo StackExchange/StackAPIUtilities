@@ -14,6 +14,24 @@ const csvText = [
   "Pat Director,Ada Lovelace,Grace Hopper,Grace,Hopper,1001,grace@example.com,Engineer",
 ].join("\n");
 
+const addOnlyExpectedPreview = {
+  syncMode: "add-only" as const,
+  groupNameTemplate: "{Senior Manager} VRM",
+  blockingErrors: [],
+  skippedRows: [],
+  groups: [
+    {
+      manager: "Ada Lovelace",
+      groupName: "Ada Lovelace VRM",
+      existingGroupId: null,
+      createGroup: true,
+      desiredUserIds: [1],
+      addUserIds: [1],
+      removeUserIds: [],
+    },
+  ],
+};
+
 describe("handleUserGroupSyncRequest", () => {
   it("returns preview results", async () => {
     const client = createClient({
@@ -216,6 +234,7 @@ describe("handleUserGroupSyncRequest", () => {
         csvText,
         groupNameTemplate: "{Senior Manager} VRM",
         syncMode: "add-only",
+        expectedPreview: addOnlyExpectedPreview,
       },
       { createClient: () => client },
     );
@@ -235,6 +254,88 @@ describe("handleUserGroupSyncRequest", () => {
       }),
     });
     expect(client.createUserGroup).toHaveBeenCalledWith({ name: "Ada Lovelace VRM", userIds: [1] });
+  });
+
+  it("rejects apply requests without an expected preview before writes", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+      createUserGroup: vi.fn().mockResolvedValue({ id: 10, name: "Ada Lovelace VRM", users: [{ id: 1 }] }),
+    });
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "apply",
+        credentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: () => client },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Preview changes before applying user group sync changes.",
+    });
+    expect(client.createUserGroup).not.toHaveBeenCalled();
+    expect(client.addUserGroupMembers).not.toHaveBeenCalled();
+    expect(client.removeUserGroupMember).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale exact-sync previews before newly detected removals are applied", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockResolvedValue([
+        {
+          id: 10,
+          name: "Ada Lovelace VRM",
+          users: [
+            { id: 1, name: "Grace Hopper" },
+            { id: 99, name: "Newly Added Member" },
+          ],
+        },
+      ]),
+    });
+    const expectedPreview = {
+      syncMode: "exact-sync" as const,
+      groupNameTemplate: "{Senior Manager} VRM",
+      blockingErrors: [],
+      skippedRows: [],
+      groups: [
+        {
+          manager: "Ada Lovelace",
+          groupName: "Ada Lovelace VRM",
+          existingGroupId: 10,
+          createGroup: false,
+          desiredUserIds: [1],
+          addUserIds: [],
+          removeUserIds: [],
+        },
+      ],
+    };
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "apply",
+        credentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "exact-sync",
+        expectedPreview,
+      },
+      { createClient: () => client },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "User group sync preview is stale. Preview changes again before applying.",
+    });
+    expect(client.createUserGroup).not.toHaveBeenCalled();
+    expect(client.addUserGroupMembers).not.toHaveBeenCalled();
+    expect(client.removeUserGroupMember).not.toHaveBeenCalled();
   });
 
   it("returns a 400 response for invalid request payloads", async () => {

@@ -2,7 +2,7 @@ import { StackApiV3Client } from "../api/stackApiV3";
 import { normalizeInstanceUrl, type NormalizedInstance } from "../credentials/credentialRules";
 import type { SessionCredentials } from "../domain/types";
 import {
-  applyUserGroupSync,
+  applyUserGroupSyncPlan,
   previewUserGroupSync,
   UserGroupSyncInputError,
   type UserGroupSyncApplyResult,
@@ -16,6 +16,7 @@ export interface UserGroupSyncRequestPayload {
   csvText: string;
   groupNameTemplate: string;
   syncMode: UserGroupSyncMode;
+  expectedPreview?: UserGroupSyncPlan;
 }
 
 interface UserGroupSyncApiDependencies {
@@ -25,6 +26,31 @@ interface UserGroupSyncApiDependencies {
 export type UserGroupSyncResponseBody =
   | { ok: true; result: UserGroupSyncPlan | UserGroupSyncApplyResult }
   | { ok: false; error: string };
+
+interface CanonicalUserGroupSyncPlan {
+  syncMode: UserGroupSyncMode;
+  groupNameTemplate: string;
+  blockingErrors: string[];
+  skippedRows: CanonicalUserGroupSyncSkippedRow[];
+  groups: CanonicalUserGroupSyncGroup[];
+}
+
+interface CanonicalUserGroupSyncSkippedRow {
+  rowNumber: number;
+  email: string;
+  seniorManager: string;
+  reason: string;
+}
+
+interface CanonicalUserGroupSyncGroup {
+  manager: string;
+  groupName: string;
+  existingGroupId: number | null;
+  createGroup: boolean;
+  desiredUserIds: number[];
+  addUserIds: number[];
+  removeUserIds: number[];
+}
 
 export async function handleUserGroupSyncRequest(
   payload: unknown,
@@ -67,6 +93,18 @@ export async function handleUserGroupSyncRequest(
     );
   }
 
+  const expectedPreview =
+    payload.action === "apply" && isUserGroupSyncPlan(payload.expectedPreview)
+      ? payload.expectedPreview
+      : null;
+
+  if (payload.action === "apply" && expectedPreview === null) {
+    return jsonResponse(
+      { ok: false, error: "Preview changes before applying user group sync changes." },
+      400,
+    );
+  }
+
   try {
     const client = dependencies.createClient
       ? dependencies.createClient(normalizedCredentials)
@@ -77,10 +115,31 @@ export async function handleUserGroupSyncRequest(
       syncMode: payload.syncMode,
       client,
     };
-    const result =
-      payload.action === "preview"
-        ? await previewUserGroupSync(runnerInput)
-        : await applyUserGroupSync(runnerInput);
+    let result: UserGroupSyncPlan | UserGroupSyncApplyResult;
+
+    if (payload.action === "preview") {
+      result = await previewUserGroupSync(runnerInput);
+    } else {
+      if (expectedPreview === null) {
+        return jsonResponse(
+          { ok: false, error: "Preview changes before applying user group sync changes." },
+          400,
+        );
+      }
+
+      const preview = await previewUserGroupSync(runnerInput);
+      if (!userGroupSyncPlansMatch(preview, expectedPreview)) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "User group sync preview is stale. Preview changes again before applying.",
+          },
+          409,
+        );
+      }
+
+      result = await applyUserGroupSyncPlan(preview, client);
+    }
 
     return jsonResponse({ ok: true, result }, 200);
   } catch (error) {
@@ -171,6 +230,113 @@ function isUserGroupSyncRequestPayload(value: unknown): value is UserGroupSyncRe
 
 function isUserGroupSyncMode(value: unknown): value is UserGroupSyncMode {
   return value === "add-only" || value === "exact-sync";
+}
+
+function isUserGroupSyncPlan(value: unknown): value is UserGroupSyncPlan {
+  return (
+    isRecord(value) &&
+    isUserGroupSyncMode(value.syncMode) &&
+    typeof value.groupNameTemplate === "string" &&
+    isStringArray(value.blockingErrors) &&
+    Array.isArray(value.skippedRows) &&
+    value.skippedRows.every(isUserGroupSyncSkippedRow) &&
+    Array.isArray(value.groups) &&
+    value.groups.every(isPlannedUserGroupSyncGroup)
+  );
+}
+
+function isUserGroupSyncSkippedRow(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Number.isInteger(value.rowNumber) &&
+    typeof value.email === "string" &&
+    typeof value.seniorManager === "string" &&
+    typeof value.reason === "string"
+  );
+}
+
+function isPlannedUserGroupSyncGroup(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.manager === "string" &&
+    typeof value.groupName === "string" &&
+    (value.existingGroupId === null || Number.isInteger(value.existingGroupId)) &&
+    typeof value.createGroup === "boolean" &&
+    isNumberArray(value.desiredUserIds) &&
+    isNumberArray(value.addUserIds) &&
+    isNumberArray(value.removeUserIds)
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((item) => Number.isInteger(item));
+}
+
+function userGroupSyncPlansMatch(left: UserGroupSyncPlan, right: UserGroupSyncPlan): boolean {
+  return JSON.stringify(canonicalizeUserGroupSyncPlan(left)) === JSON.stringify(canonicalizeUserGroupSyncPlan(right));
+}
+
+function canonicalizeUserGroupSyncPlan(plan: UserGroupSyncPlan): CanonicalUserGroupSyncPlan {
+  return {
+    syncMode: plan.syncMode,
+    groupNameTemplate: plan.groupNameTemplate,
+    blockingErrors: [...plan.blockingErrors].sort(compareStrings),
+    skippedRows: plan.skippedRows
+      .map((row) => ({
+        rowNumber: row.rowNumber,
+        email: row.email,
+        seniorManager: row.seniorManager,
+        reason: row.reason,
+      }))
+      .sort(compareSkippedRows),
+    groups: plan.groups
+      .map((group) => ({
+        manager: group.manager,
+        groupName: group.groupName,
+        existingGroupId: group.existingGroupId,
+        createGroup: group.createGroup,
+        desiredUserIds: sortNumbers(group.desiredUserIds),
+        addUserIds: sortNumbers(group.addUserIds),
+        removeUserIds: sortNumbers(group.removeUserIds),
+      }))
+      .sort(compareGroups),
+  };
+}
+
+function compareGroups(left: CanonicalUserGroupSyncGroup, right: CanonicalUserGroupSyncGroup): number {
+  return compareStrings(left.groupName, right.groupName) || compareStrings(left.manager, right.manager);
+}
+
+function compareSkippedRows(
+  left: CanonicalUserGroupSyncSkippedRow,
+  right: CanonicalUserGroupSyncSkippedRow,
+): number {
+  return (
+    left.rowNumber - right.rowNumber ||
+    compareStrings(left.email, right.email) ||
+    compareStrings(left.seniorManager, right.seniorManager) ||
+    compareStrings(left.reason, right.reason)
+  );
+}
+
+function sortNumbers(values: number[]): number[] {
+  return [...values].sort((left, right) => left - right);
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }
 
 function jsonResponse(body: UserGroupSyncResponseBody, status: number): Response {

@@ -139,6 +139,7 @@ describe("UserGroupSyncPanel", () => {
       expect.objectContaining({
         action: "apply",
         syncMode: "exact-sync",
+        expectedPreview: exactSyncPreviewBody.result,
       }),
     );
     expect(await screen.findByText("remove-member succeeded for Ada Lovelace VRM: 99")).toBeInTheDocument();
@@ -220,6 +221,56 @@ describe("UserGroupSyncPanel", () => {
     expect(screen.queryByText("Ada Lovelace VRM")).not.toBeInTheDocument();
     expect(screen.queryByText("Preview ready.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
+  });
+
+  it("ignores a pending preview error response when inputs change before it resolves", async () => {
+    const user = userEvent.setup();
+    const pendingPreview = deferred<Response>();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValueOnce(pendingPreview.promise);
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    await user.upload(
+      screen.getByLabelText("Upload user export CSV"),
+      new File([csv], "users.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+    await user.clear(screen.getByLabelText("Group name template"));
+    await user.type(screen.getByLabelText("Group name template"), "Owners");
+
+    pendingPreview.resolve(jsonResponse({ ok: false, error: "Preview failed" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview changes" })).toBeEnabled();
+    });
+    expect(fetchActions(fetchMock)).toEqual(["preview"]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Preview failed")).not.toBeInTheDocument();
+  });
+
+  it("ignores a pending rejected preview request when inputs change before it rejects", async () => {
+    const user = userEvent.setup();
+    const pendingPreview = deferred<Response>();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValueOnce(pendingPreview.promise);
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    await user.upload(
+      screen.getByLabelText("Upload user export CSV"),
+      new File([csv], "users.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+    await user.clear(screen.getByLabelText("Group name template"));
+    await user.type(screen.getByLabelText("Group name template"), "Owners");
+
+    pendingPreview.reject(new Error("Network failed"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview changes" })).toBeEnabled();
+    });
+    expect(fetchActions(fetchMock)).toEqual(["preview"]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Network failed")).not.toBeInTheDocument();
   });
 
   it("clears stale apply summaries when a later apply is pending and then fails", async () => {
@@ -321,6 +372,54 @@ describe("UserGroupSyncPanel", () => {
     expect(screen.getByRole("button", { name: "Preview changes" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
     expect(screen.queryByText("Ada Lovelace VRM")).not.toBeInTheDocument();
+  });
+
+  it("keeps the latest selected CSV when an earlier file read resolves later", async () => {
+    const user = userEvent.setup();
+    const firstRead = deferred<string>();
+    const secondRead = deferred<string>();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(addOnlyPreviewBody));
+    const newerCsv = [
+      "Director,Senior Manager,User Group Member,First Name,Last Name,Colleague ID,Email,Job Title",
+      "Pat Director,Ada Lovelace,Linus Torvalds,Linus,Torvalds,1002,linus@example.com,Engineer",
+    ].join("\n");
+    const firstFile = new File([""], "old.csv", { type: "text/csv" });
+    const secondFile = new File([""], "new.csv", { type: "text/csv" });
+    Object.defineProperty(firstFile, "text", {
+      value: vi.fn().mockReturnValue(firstRead.promise),
+    });
+    Object.defineProperty(secondFile, "text", {
+      value: vi.fn().mockReturnValue(secondRead.promise),
+    });
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    const input = screen.getByLabelText("Upload user export CSV");
+    await user.upload(input, firstFile);
+    await user.upload(input, secondFile);
+
+    await act(async () => {
+      secondRead.resolve(newerCsv);
+      await secondRead.promise;
+    });
+    expect(await screen.findByText("Loaded file: new.csv")).toBeInTheDocument();
+
+    await act(async () => {
+      firstRead.resolve(csv);
+      await firstRead.promise;
+    });
+
+    expect(screen.getByText("Loaded file: new.csv")).toBeInTheDocument();
+    expect(screen.queryByText("Loaded file: old.csv")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(
+      expect.objectContaining({
+        action: "preview",
+        csvText: newerCsv,
+      }),
+    );
   });
 
   it("disables apply when preview has blocking errors", async () => {
