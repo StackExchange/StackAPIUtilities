@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UserGroupSyncPanel } from "./UserGroupSyncPanel";
@@ -161,12 +161,15 @@ describe("UserGroupSyncPanel", () => {
     await user.click(screen.getByRole("button", { name: "Preview changes" }));
     expect(await screen.findByText("Ada Lovelace VRM")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Apply changes" }));
-    await user.click(screen.getByRole("button", { name: "Apply changes" }));
+    const applyButton = screen.getByRole("button", { name: "Apply changes" });
+    act(() => {
+      applyButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      applyButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
 
+    expect(fetchActions(fetchMock).filter((action) => action === "apply")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Preview changes" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
-    expect(fetchActions(fetchMock).filter((action) => action === "apply")).toHaveLength(1);
 
     pendingApply.resolve(
       jsonResponse({
@@ -191,6 +194,84 @@ describe("UserGroupSyncPanel", () => {
       }),
     );
     expect(await screen.findByText("create-group succeeded for Ada Lovelace VRM: 1")).toBeInTheDocument();
+  });
+
+  it("ignores a pending preview response when inputs change before it resolves", async () => {
+    const user = userEvent.setup();
+    const pendingPreview = deferred<Response>();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValueOnce(pendingPreview.promise);
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    await user.upload(
+      screen.getByLabelText("Upload user export CSV"),
+      new File([csv], "users.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+    await user.clear(screen.getByLabelText("Group name template"));
+    await user.type(screen.getByLabelText("Group name template"), "Owners");
+
+    pendingPreview.resolve(jsonResponse(addOnlyPreviewBody));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview changes" })).toBeEnabled();
+    });
+    expect(fetchActions(fetchMock)).toEqual(["preview"]);
+    expect(screen.queryByText("Ada Lovelace VRM")).not.toBeInTheDocument();
+    expect(screen.queryByText("Preview ready.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
+  });
+
+  it("clears stale apply summaries when a later apply is pending and then fails", async () => {
+    const user = userEvent.setup();
+    const pendingFailedApply = deferred<Response>();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(addOnlyPreviewBody))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          result: {
+            preview: {
+              groups: [],
+              skippedRows: [],
+              blockingErrors: [],
+              syncMode: "add-only",
+              groupNameTemplate: "{Senior Manager} VRM",
+            },
+            operations: [
+              {
+                kind: "create-group",
+                groupName: "Ada Lovelace VRM",
+                userIds: [1],
+                status: "succeeded",
+              },
+            ],
+          },
+        }),
+      )
+      .mockReturnValueOnce(pendingFailedApply.promise);
+
+    render(<UserGroupSyncPanel credentials={credentials} />);
+
+    await user.upload(
+      screen.getByLabelText("Upload user export CSV"),
+      new File([csv], "users.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview changes" }));
+    expect(await screen.findByText("Ada Lovelace VRM")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(await screen.findByText("create-group succeeded for Ada Lovelace VRM: 1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(screen.queryByText("create-group succeeded for Ada Lovelace VRM: 1")).not.toBeInTheDocument();
+
+    pendingFailedApply.resolve(jsonResponse({ ok: false, error: "Apply failed" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Apply failed");
+    expect(screen.queryByText("create-group succeeded for Ada Lovelace VRM: 1")).not.toBeInTheDocument();
+    expect(fetchActions(fetchMock).filter((action) => action === "apply")).toHaveLength(2);
   });
 
   it("does not apply exact-sync changes when browser confirmation is cancelled", async () => {

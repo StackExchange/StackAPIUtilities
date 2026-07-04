@@ -20,11 +20,20 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
   const [groupNameTemplate, setGroupNameTemplate] = useState(DEFAULT_TEMPLATE);
   const [syncMode, setSyncMode] = useState<UserGroupSyncMode>("add-only");
   const [preview, setPreview] = useState<UserGroupSyncPlan | null>(null);
+  const [previewSnapshotKey, setPreviewSnapshotKey] = useState<string | null>(null);
   const [applyResult, setApplyResult] = useState<UserGroupSyncApplyResult | null>(null);
   const [pendingAction, setPendingAction] = useState<"preview" | "apply" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestInFlightRef = useRef(false);
+  const inputSnapshotKey = createInputSnapshotKey({
+    credentials,
+    csvText,
+    groupNameTemplate,
+    syncMode,
+  });
+  const latestInputSnapshotKeyRef = useRef(inputSnapshotKey);
+  latestInputSnapshotKeyRef.current = inputSnapshotKey;
 
   const exactSync = syncMode === "exact-sync";
   const hasCsv = csvText.trim() !== "";
@@ -33,9 +42,18 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
   const canApply =
     !requestPending &&
     preview !== null &&
+    previewSnapshotKey === inputSnapshotKey &&
     preview.blockingErrors.length === 0 &&
     credentials !== null &&
     hasCsv;
+
+  function clearSyncResults() {
+    setPreview(null);
+    setPreviewSnapshotKey(null);
+    setApplyResult(null);
+    setMessage(null);
+    setError(null);
+  }
 
   async function handleFile(fileList: FileList | null) {
     const file = fileList?.[0];
@@ -43,17 +61,12 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
 
     setCsvText("");
     setFileName(null);
-    setPreview(null);
-    setApplyResult(null);
-    setError(null);
-    setMessage(null);
+    clearSyncResults();
 
     try {
       const text = await readFileText(file);
       setCsvText(text);
       setFileName(file.name);
-      setPreview(null);
-      setApplyResult(null);
       setError(null);
       setMessage(`Loaded ${file.name}.`);
     } catch (caughtError) {
@@ -67,9 +80,30 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
       return;
     }
 
+    if (action === "apply") {
+      setApplyResult(null);
+      setMessage(null);
+      setError(null);
+    }
+
     if (!credentials) {
       setError(MISSING_CREDENTIALS_MESSAGE);
       setMessage(null);
+      return;
+    }
+
+    if (!hasCsv) {
+      return;
+    }
+
+    const requestSnapshotKey = inputSnapshotKey;
+
+    if (
+      action === "apply" &&
+      (preview === null ||
+        previewSnapshotKey !== requestSnapshotKey ||
+        preview.blockingErrors.length > 0)
+    ) {
       return;
     }
 
@@ -79,6 +113,10 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
       !window.confirm("Exact sync can remove users from generated VRM groups. Apply these changes?")
     ) {
       return;
+    }
+
+    if (action === "preview") {
+      clearSyncResults();
     }
 
     requestInFlightRef.current = true;
@@ -104,13 +142,20 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
         setMessage(null);
         if (action === "preview") {
           setPreview(null);
+          setPreviewSnapshotKey(null);
+          setApplyResult(null);
+        } else {
           setApplyResult(null);
         }
         return;
       }
 
       if (action === "preview") {
+        if (latestInputSnapshotKeyRef.current !== requestSnapshotKey) {
+          return;
+        }
         setPreview(body.result as UserGroupSyncPlan);
+        setPreviewSnapshotKey(requestSnapshotKey);
         setApplyResult(null);
         setMessage("Preview ready.");
       } else {
@@ -120,6 +165,11 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
     } catch (caughtError) {
       setMessage(null);
       setError(caughtError instanceof Error ? caughtError.message : "Unable to run user group sync.");
+      if (action === "preview") {
+        setPreview(null);
+        setPreviewSnapshotKey(null);
+      }
+      setApplyResult(null);
     } finally {
       requestInFlightRef.current = false;
       setPendingAction(null);
@@ -160,8 +210,7 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
             value={groupNameTemplate}
             onChange={(event) => {
               setGroupNameTemplate(event.currentTarget.value);
-              setPreview(null);
-              setApplyResult(null);
+              clearSyncResults();
             }}
           />
         </label>
@@ -172,8 +221,7 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
             checked={exactSync}
             onChange={(event) => {
               setSyncMode(event.currentTarget.checked ? "exact-sync" : "add-only");
-              setPreview(null);
-              setApplyResult(null);
+              clearSyncResults();
             }}
           />{" "}
           Exact sync
@@ -302,6 +350,28 @@ function ApplySummary({ result }: { result: UserGroupSyncApplyResult }) {
 
 function formatIds(userIds: number[]) {
   return userIds.join(", ") || "None";
+}
+
+function createInputSnapshotKey(input: {
+  credentials: SessionCredentials | null;
+  csvText: string;
+  groupNameTemplate: string;
+  syncMode: UserGroupSyncMode;
+}) {
+  return JSON.stringify({
+    credentials: input.credentials
+      ? {
+          instanceType: input.credentials.instanceType,
+          baseUrl: input.credentials.baseUrl,
+          apiKey: input.credentials.apiKey ?? null,
+          accessToken: input.credentials.accessToken ?? null,
+          pat: input.credentials.pat ?? null,
+        }
+      : null,
+    csvText: input.csvText,
+    groupNameTemplate: input.groupNameTemplate,
+    syncMode: input.syncMode,
+  });
 }
 
 async function readFileText(file: File) {
