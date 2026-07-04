@@ -6,6 +6,20 @@ export type ReportCapability = "live-api" | "upload";
 
 export type CredentialRequirement = "api-key" | "access-token" | "pat" | "enterprise-admin" | "community-access";
 
+export type RunPeriodRole = "current" | "comparison";
+
+export interface PeriodScope {
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface ReportRunScope {
+  current: PeriodScope;
+  comparison?: PeriodScope;
+  pageSize: number;
+  maxPagesPerDataset: number;
+}
+
 export type DatasetName =
   | "users"
   | "tags"
