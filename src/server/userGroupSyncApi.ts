@@ -83,11 +83,28 @@ export async function handleUserGroupSyncRequest(
 
     return jsonResponse({ ok: true, result }, 200);
   } catch (error) {
+    const errorMessage = toErrorMessage(error);
     return jsonResponse(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
-      500,
+      { ok: false, error: errorMessage },
+      isUserGroupSyncInputErrorMessage(errorMessage) ? 400 : 500,
     );
   }
+}
+
+const USER_GROUP_SYNC_INPUT_ERROR_PREFIXES = [
+  "User export CSV is missing required column(s):",
+  "Too few fields:",
+  "Too many fields:",
+  "Quoted field unterminated",
+  "Unable to auto-detect delimiting character;",
+] as const;
+
+function isUserGroupSyncInputErrorMessage(message: string): boolean {
+  return USER_GROUP_SYNC_INPUT_ERROR_PREFIXES.some((prefix) => message.startsWith(prefix));
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeWriteCredentials(credentials: SessionCredentials): SessionCredentials {
