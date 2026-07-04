@@ -20,6 +20,7 @@ describe("handleUserGroupSyncRequest", () => {
       getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
       getUserGroups: vi.fn().mockResolvedValue([]),
     });
+    const createClientDependency = vi.fn(() => client);
 
     const response = await handleUserGroupSyncRequest(
       {
@@ -29,7 +30,7 @@ describe("handleUserGroupSyncRequest", () => {
         groupNameTemplate: "{Senior Manager} VRM",
         syncMode: "add-only",
       },
-      { createClient: () => client },
+      { createClient: createClientDependency },
     );
 
     expect(response.status).toBe(200);
@@ -45,6 +46,7 @@ describe("handleUserGroupSyncRequest", () => {
         ],
       }),
     });
+    expect(createClientDependency).toHaveBeenCalledWith(credentials);
   });
 
   it("rejects non-enterprise credentials", async () => {
@@ -111,6 +113,93 @@ describe("handleUserGroupSyncRequest", () => {
       error: "Enterprise user group sync requires a valid instance URL.",
     });
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("rejects arbitrary public hosts as Enterprise write targets", async () => {
+    const createClient = vi.fn();
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: {
+          ...credentials,
+          baseUrl: "https://example.com",
+        },
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Enterprise user group sync requires a Stack Enterprise instance URL.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("rejects local HTTP targets as Enterprise write targets", async () => {
+    const createClient = vi.fn();
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: {
+          ...credentials,
+          baseUrl: "http://127.0.0.1:3000",
+        },
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Enterprise user group sync requires a Stack Enterprise instance URL.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("accepts Stack Enterprise instance URLs", async () => {
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+    });
+    const createClientDependency = vi.fn(() => client);
+    const stackEnterpriseCredentials: SessionCredentials = {
+      ...credentials,
+      baseUrl: "https://stackenterprise.co",
+    };
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: stackEnterpriseCredentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: createClientDependency },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      result: expect.objectContaining({
+        groups: [
+          expect.objectContaining({
+            groupName: "Ada Lovelace VRM",
+            createGroup: true,
+          }),
+        ],
+      }),
+    });
+    expect(createClientDependency).toHaveBeenCalledWith(stackEnterpriseCredentials);
   });
 
   it("applies changes through the runner", async () => {

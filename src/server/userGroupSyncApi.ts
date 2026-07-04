@@ -51,6 +51,13 @@ export async function handleUserGroupSyncRequest(
     );
   }
 
+  if (!isSupportedEnterpriseWriteTarget(normalizedInstance)) {
+    return jsonResponse(
+      { ok: false, error: "Enterprise user group sync requires a Stack Enterprise instance URL." },
+      400,
+    );
+  }
+
   if (!payload.credentials.accessToken && !payload.credentials.pat) {
     return jsonResponse(
       { ok: false, error: "Enterprise user group sync requires an access token with write_access." },
@@ -98,6 +105,16 @@ function normalizeRequestInstance(baseUrl: string): NormalizedInstance | null {
   } catch {
     return null;
   }
+}
+
+function isSupportedEnterpriseWriteTarget(normalizedInstance: NormalizedInstance): boolean {
+  const url = new URL(normalizedInstance.baseUrl);
+  const hostname = url.hostname.toLowerCase();
+
+  return (
+    url.protocol === "https:" &&
+    (hostname === "stackenterprise.co" || hostname.endsWith(".stackenterprise.co"))
+  );
 }
 
 function isUserGroupSyncRequestPayload(value: unknown): value is UserGroupSyncRequestPayload {
