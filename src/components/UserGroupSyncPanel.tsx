@@ -29,7 +29,7 @@ export function UserGroupSyncPanel({ credentials }: UserGroupSyncPanelProps) {
   const exactSync = syncMode === "exact-sync";
   const hasCsv = csvText.trim() !== "";
   const requestPending = pendingAction !== null;
-  const canPreview = hasCsv && !requestPending;
+  const canPreview = credentials !== null && hasCsv && !requestPending;
   const canApply =
     !requestPending &&
     preview !== null &&
