@@ -74,6 +74,41 @@ describe("previewUserGroupSync", () => {
     expect(client.getUserByEmail).toHaveBeenCalledTimes(2);
     expect(client.getUserGroups).toHaveBeenCalledTimes(1);
   });
+
+  it("continues preview when one email lookup fails", async () => {
+    const client = createClient();
+    vi.mocked(client.getUserByEmail).mockImplementation(async (email: string) => {
+      if (email.toLowerCase() === "linus@example.com") {
+        throw new Error("Stack lookup failed");
+      }
+
+      return { id: 1, email, name: "Grace Hopper" };
+    });
+    vi.mocked(client.getUserGroups).mockResolvedValue([]);
+
+    const preview = await previewUserGroupSync(createInput(client));
+
+    expect(preview.blockingErrors).toEqual([]);
+    expect(preview.groups).toEqual([
+      expect.objectContaining({
+        groupName: "Ada Lovelace VRM",
+        createGroup: true,
+        desiredUserIds: [1],
+        addUserIds: [1],
+      }),
+    ]);
+    expect(preview.skippedRows).toEqual([
+      {
+        rowNumber: 3,
+        email: "linus@example.com",
+        seniorManager: "Ada Lovelace",
+        reason: "Email not found in Stack Enterprise",
+      },
+    ]);
+    expect(client.getUserByEmail).toHaveBeenCalledWith("grace@example.com");
+    expect(client.getUserByEmail).toHaveBeenCalledWith("linus@example.com");
+    expect(client.getUserGroups).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("applyUserGroupSync", () => {

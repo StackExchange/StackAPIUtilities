@@ -256,6 +256,54 @@ describe("handleUserGroupSyncRequest", () => {
     expect(client.createUserGroup).toHaveBeenCalledWith({ name: "Ada Lovelace VRM", userIds: [1] });
   });
 
+  it("redacts submitted credentials from operation-level apply failures", async () => {
+    const accessToken = "se_access_1234567890abcdef1234567890abcdef";
+    const pat = "se_pat_abcdef1234567890abcdef1234567890";
+    const requestCredentials: SessionCredentials = {
+      ...credentials,
+      accessToken: `  ${accessToken}  `,
+      pat: ` ${pat} `,
+    };
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockResolvedValue([]),
+      createUserGroup: vi
+        .fn()
+        .mockRejectedValue(new Error(`Create failed with ${accessToken}, ${pat}, and ${requestCredentials.pat}`)),
+    });
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "apply",
+        credentials: requestCredentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+        expectedPreview: addOnlyExpectedPreview,
+      },
+      { createClient: () => client },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: true,
+      result: expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("[redacted]"),
+          }),
+        ],
+      }),
+    });
+    const operationError = body.result.operations[0].error;
+    expect(operationError).not.toContain(accessToken);
+    expect(operationError).not.toContain(requestCredentials.accessToken);
+    expect(operationError).not.toContain(pat);
+    expect(operationError).not.toContain(requestCredentials.pat);
+  });
+
   it("rejects apply requests without an expected preview before writes", async () => {
     const client = createClient({
       getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
@@ -571,8 +619,8 @@ describe("handleUserGroupSyncRequest", () => {
     const parserLikeError =
       "User export CSV is missing required column(s): Director, User Group Member";
     const client = createClient({
-      getUserByEmail: vi.fn().mockRejectedValue(new Error(parserLikeError)),
-      getUserGroups: vi.fn().mockResolvedValue([]),
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockRejectedValue(new Error(parserLikeError)),
     });
 
     const response = await handleUserGroupSyncRequest(
@@ -595,8 +643,8 @@ describe("handleUserGroupSyncRequest", () => {
 
   it("returns runner errors as 500 responses", async () => {
     const client = createClient({
-      getUserByEmail: vi.fn().mockRejectedValue(new Error("Stack lookup failed")),
-      getUserGroups: vi.fn().mockResolvedValue([]),
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi.fn().mockRejectedValue(new Error("Stack group load failed")),
     });
 
     const response = await handleUserGroupSyncRequest(
@@ -613,8 +661,46 @@ describe("handleUserGroupSyncRequest", () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: "Stack lookup failed",
+      error: "Stack group load failed",
     });
+  });
+
+  it("redacts submitted credentials from top-level errors", async () => {
+    const accessToken = "se_access_1234567890abcdef1234567890abcdef";
+    const pat = "se_pat_abcdef1234567890abcdef1234567890";
+    const requestCredentials: SessionCredentials = {
+      ...credentials,
+      accessToken: ` ${accessToken} `,
+      pat: `  ${pat}  `,
+    };
+    const client = createClient({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: 1, email: "grace@example.com", name: "Grace Hopper" }),
+      getUserGroups: vi
+        .fn()
+        .mockRejectedValue(new Error(`Group load failed for ${requestCredentials.accessToken} and ${pat}`)),
+    });
+
+    const response = await handleUserGroupSyncRequest(
+      {
+        action: "preview",
+        credentials: requestCredentials,
+        csvText,
+        groupNameTemplate: "{Senior Manager} VRM",
+        syncMode: "add-only",
+      },
+      { createClient: () => client },
+    );
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: false,
+      error: expect.stringContaining("[redacted]"),
+    });
+    expect(body.error).not.toContain(accessToken);
+    expect(body.error).not.toContain(requestCredentials.accessToken);
+    expect(body.error).not.toContain(pat);
+    expect(body.error).not.toContain(requestCredentials.pat);
   });
 });
 

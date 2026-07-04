@@ -27,6 +27,8 @@ export type UserGroupSyncResponseBody =
   | { ok: true; result: UserGroupSyncPlan | UserGroupSyncApplyResult }
   | { ok: false; error: string };
 
+const REDACTED_CREDENTIAL = "[redacted]";
+
 interface CanonicalUserGroupSyncPlan {
   syncMode: UserGroupSyncMode;
   groupNameTemplate: string;
@@ -61,9 +63,12 @@ export async function handleUserGroupSyncRequest(
   }
 
   const normalizedCredentials = normalizeWriteCredentials(payload.credentials);
+  const redactCredentialSecrets = createCredentialRedactor(payload.credentials, normalizedCredentials);
+  const browserJsonResponse = (body: UserGroupSyncResponseBody, status: number) =>
+    redactedJsonResponse(body, status, redactCredentialSecrets);
   const normalizedInstance = normalizeRequestInstance(normalizedCredentials.baseUrl);
   if (normalizedInstance === null) {
-    return jsonResponse(
+    return browserJsonResponse(
       { ok: false, error: "Enterprise user group sync requires a valid instance URL." },
       400,
     );
@@ -73,21 +78,21 @@ export async function handleUserGroupSyncRequest(
     normalizedCredentials.instanceType !== "enterprise" ||
     normalizedInstance.instanceType !== "enterprise"
   ) {
-    return jsonResponse(
+    return browserJsonResponse(
       { ok: false, error: "Enterprise user group sync requires Enterprise session credentials." },
       400,
     );
   }
 
   if (!isSupportedEnterpriseWriteTarget(normalizedInstance)) {
-    return jsonResponse(
+    return browserJsonResponse(
       { ok: false, error: "Enterprise user group sync requires a Stack Enterprise instance URL." },
       400,
     );
   }
 
   if (!normalizedCredentials.accessToken && !normalizedCredentials.pat) {
-    return jsonResponse(
+    return browserJsonResponse(
       { ok: false, error: "Enterprise user group sync requires an access token with write_access." },
       400,
     );
@@ -99,7 +104,7 @@ export async function handleUserGroupSyncRequest(
       : null;
 
   if (payload.action === "apply" && expectedPreview === null) {
-    return jsonResponse(
+    return browserJsonResponse(
       { ok: false, error: "Preview changes before applying user group sync changes." },
       400,
     );
@@ -121,7 +126,7 @@ export async function handleUserGroupSyncRequest(
       result = await previewUserGroupSync(runnerInput);
     } else {
       if (expectedPreview === null) {
-        return jsonResponse(
+        return browserJsonResponse(
           { ok: false, error: "Preview changes before applying user group sync changes." },
           400,
         );
@@ -129,7 +134,7 @@ export async function handleUserGroupSyncRequest(
 
       const preview = await previewUserGroupSync(runnerInput);
       if (!userGroupSyncPlansMatch(preview, expectedPreview)) {
-        return jsonResponse(
+        return browserJsonResponse(
           {
             ok: false,
             error: "User group sync preview is stale. Preview changes again before applying.",
@@ -141,10 +146,10 @@ export async function handleUserGroupSyncRequest(
       result = await applyUserGroupSyncPlan(preview, client);
     }
 
-    return jsonResponse({ ok: true, result }, 200);
+    return browserJsonResponse({ ok: true, result }, 200);
   } catch (error) {
     const errorMessage = toErrorMessage(error);
-    return jsonResponse(
+    return browserJsonResponse(
       { ok: false, error: errorMessage },
       error instanceof UserGroupSyncInputError ? 400 : 500,
     );
@@ -391,6 +396,55 @@ function jsonResponse(body: UserGroupSyncResponseBody, status: number): Response
       "Content-Type": "application/json",
     },
   });
+}
+
+function redactedJsonResponse(
+  body: UserGroupSyncResponseBody,
+  status: number,
+  redactCredentialSecrets: (value: string) => string,
+): Response {
+  return jsonResponse(redactBrowserStrings(body, redactCredentialSecrets) as UserGroupSyncResponseBody, status);
+}
+
+function createCredentialRedactor(
+  rawCredentials: SessionCredentials,
+  normalizedCredentials: SessionCredentials,
+): (value: string) => string {
+  const secretCandidates = [
+    rawCredentials.accessToken,
+    rawCredentials.pat,
+    normalizedCredentials.accessToken,
+    normalizedCredentials.pat,
+  ].filter(isNonBlankString);
+  const uniqueSecretCandidates = [...new Set(secretCandidates)].sort((left, right) => right.length - left.length);
+
+  return (value) =>
+    uniqueSecretCandidates.reduce(
+      (redactedValue, secret) => redactedValue.split(secret).join(REDACTED_CREDENTIAL),
+      value,
+    );
+}
+
+function redactBrowserStrings(value: unknown, redactCredentialSecrets: (value: string) => string): unknown {
+  if (typeof value === "string") {
+    return redactCredentialSecrets(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactBrowserStrings(item, redactCredentialSecrets));
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactBrowserStrings(item, redactCredentialSecrets)]),
+    );
+  }
+
+  return value;
+}
+
+function isNonBlankString(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
