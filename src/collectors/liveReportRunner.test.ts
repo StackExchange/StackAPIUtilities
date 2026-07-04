@@ -47,4 +47,29 @@ describe("runLiveReport", () => {
     ).rejects.toThrow(UnsupportedLiveReportRunError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("runs Data Export by collecting concrete API datasets", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ items: [{ id: 1 }], has_more: false, totalPages: 1 }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    const result = await runLiveReport("data-export", basicCredentials, {
+      fetchFn: fetchMock,
+    });
+
+    expect(result.datasets.map((dataset) => dataset.datasetName)).toEqual([
+      "users",
+      "userGroups",
+      "tags",
+      "articles",
+      "questions",
+      "answers",
+      "comments",
+    ]);
+    expect(result.messages).toContain("Collected comments (1 record) for Data Export.");
+  });
 });

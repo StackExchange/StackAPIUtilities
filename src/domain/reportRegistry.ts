@@ -65,7 +65,7 @@ export const reportRegistry: readonly ReportMetadata[] = [
     supportedInstances: ["basic-business", "enterprise"],
     capabilities: ["live-api", "upload"],
     credentialRequirements: ["access-token", "api-key"],
-    requiredDatasets: ["users", "userGroups", "tags", "articles", "questions", "dataExport"],
+    requiredDatasets: ["users", "userGroups", "tags", "articles", "questions", "answers", "comments"],
   },
   {
     id: "webhook-report",

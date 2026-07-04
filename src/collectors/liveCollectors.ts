@@ -18,6 +18,8 @@ const liveDatasetEndpoints: Partial<Record<DatasetName, LiveDatasetEndpoint>> = 
   users: { client: "v2", path: "/users" },
   tags: { client: "v2", path: "/tags" },
   questions: { client: "v2", path: "/questions" },
+  answers: { client: "v2", path: "/answers" },
+  comments: { client: "v2", path: "/comments" },
   articles: { client: "v2", path: "/articles" },
   communities: { client: "v3", path: "/communities" },
   userGroups: { client: "v3", path: "/user-groups" },

@@ -24,6 +24,18 @@ describe("planDatasetsForReports", () => {
     const selectedReports: readonly ReportId[] = ["inactive-users"];
     expect(planDatasetsForReports(selectedReports)).toEqual(["users"]);
   });
+
+  it("plans concrete export datasets for Data Export live runs", () => {
+    expect(planDatasetsForReports(["data-export"])).toEqual([
+      "users",
+      "userGroups",
+      "tags",
+      "articles",
+      "questions",
+      "answers",
+      "comments",
+    ]);
+  });
 });
 
 describe("collectDataset", () => {
@@ -37,6 +49,16 @@ describe("collectDataset", () => {
     const clients = createMockClients();
     await expect(collectDataset("communities", clients)).resolves.toEqual([{ id: "community" }]);
     expect(clients.v3.getPagedItems).toHaveBeenCalledWith("/communities", { pagesize: "100" });
+  });
+
+  it("collects answer and comment export datasets through v2 endpoints", async () => {
+    const clients = createMockClients();
+
+    await expect(collectDataset("answers", clients)).resolves.toEqual([{ id: 1 }]);
+    await expect(collectDataset("comments", clients)).resolves.toEqual([{ id: 1 }]);
+
+    expect(clients.v2.getPagedItems).toHaveBeenCalledWith("/answers", { pagesize: "100" });
+    expect(clients.v2.getPagedItems).toHaveBeenCalledWith("/comments", { pagesize: "100" });
   });
 
   it("throws an explicit error for unsupported live datasets", async () => {

@@ -10,6 +10,8 @@ export type DatasetName =
   | "users"
   | "tags"
   | "questions"
+  | "answers"
+  | "comments"
   | "articles"
   | "communities"
   | "userGroups"
