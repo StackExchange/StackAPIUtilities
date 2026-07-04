@@ -1,0 +1,197 @@
+import {
+  parseUserExportCsv,
+  planUserGroupSync,
+  type ExistingUserGroup,
+  type ExistingUserGroupMember,
+  type ResolvedStackUser,
+  type UserGroupSyncMode,
+  type UserGroupSyncPlan,
+} from "./userGroupSync";
+
+export interface UserGroupSyncClientUser {
+  id: number;
+  email?: string | null;
+  name?: string;
+}
+
+export interface UserGroupSyncClientGroup {
+  id: number;
+  name: string;
+  users?: ExistingUserGroupMember[];
+}
+
+export interface UserGroupSyncClient {
+  getUserByEmail(email: string): Promise<UserGroupSyncClientUser | null>;
+  getUserGroups(): Promise<UserGroupSyncClientGroup[]>;
+  createUserGroup(input: { name: string; userIds: number[] }): Promise<UserGroupSyncClientGroup>;
+  addUserGroupMembers(userGroupId: number, userIds: number[]): Promise<UserGroupSyncClientGroup>;
+  removeUserGroupMember(userGroupId: number, userId: number): Promise<void>;
+}
+
+export interface UserGroupSyncRunnerInput {
+  csvText: string;
+  groupNameTemplate: string;
+  syncMode: UserGroupSyncMode;
+  client: UserGroupSyncClient;
+}
+
+export interface UserGroupSyncOperationResult {
+  kind: "create-group" | "add-members" | "remove-member";
+  groupName: string;
+  userIds: number[];
+  status: "succeeded" | "failed";
+  error?: string;
+}
+
+export interface UserGroupSyncApplyResult {
+  preview: UserGroupSyncPlan;
+  operations: UserGroupSyncOperationResult[];
+}
+
+export async function previewUserGroupSync(input: UserGroupSyncRunnerInput): Promise<UserGroupSyncPlan> {
+  const rows = parseUserExportCsv(input.csvText);
+  const resolvedUsers = await resolveUsersByEmail(input.client, rows.map((row) => row.email));
+  const existingGroups = normalizeExistingGroups(await input.client.getUserGroups());
+
+  return planUserGroupSync({
+    rows,
+    groupNameTemplate: input.groupNameTemplate,
+    syncMode: input.syncMode,
+    existingGroups,
+    resolvedUsers,
+  });
+}
+
+export async function applyUserGroupSync(input: UserGroupSyncRunnerInput): Promise<UserGroupSyncApplyResult> {
+  const preview = await previewUserGroupSync(input);
+  const operations: UserGroupSyncOperationResult[] = [];
+
+  if (preview.blockingErrors.length > 0) {
+    return { preview, operations };
+  }
+
+  for (const group of preview.groups) {
+    let userGroupId = group.existingGroupId;
+
+    if (group.createGroup) {
+      try {
+        const createdGroup = await input.client.createUserGroup({
+          name: group.groupName,
+          userIds: group.desiredUserIds,
+        });
+        userGroupId = createdGroup.id;
+        operations.push({
+          kind: "create-group",
+          groupName: group.groupName,
+          userIds: group.desiredUserIds,
+          status: "succeeded",
+        });
+      } catch (error) {
+        operations.push({
+          kind: "create-group",
+          groupName: group.groupName,
+          userIds: group.desiredUserIds,
+          status: "failed",
+          error: toErrorMessage(error),
+        });
+        continue;
+      }
+    } else if (userGroupId !== null && group.addUserIds.length > 0) {
+      try {
+        await input.client.addUserGroupMembers(userGroupId, group.addUserIds);
+        operations.push({
+          kind: "add-members",
+          groupName: group.groupName,
+          userIds: group.addUserIds,
+          status: "succeeded",
+        });
+      } catch (error) {
+        operations.push({
+          kind: "add-members",
+          groupName: group.groupName,
+          userIds: group.addUserIds,
+          status: "failed",
+          error: toErrorMessage(error),
+        });
+      }
+    }
+
+    if (input.syncMode === "exact-sync" && userGroupId !== null) {
+      for (const userId of group.removeUserIds) {
+        try {
+          await input.client.removeUserGroupMember(userGroupId, userId);
+          operations.push({
+            kind: "remove-member",
+            groupName: group.groupName,
+            userIds: [userId],
+            status: "succeeded",
+          });
+        } catch (error) {
+          operations.push({
+            kind: "remove-member",
+            groupName: group.groupName,
+            userIds: [userId],
+            status: "failed",
+            error: toErrorMessage(error),
+          });
+        }
+      }
+    }
+  }
+
+  return { preview, operations };
+}
+
+async function resolveUsersByEmail(
+  client: UserGroupSyncClient,
+  emails: string[],
+): Promise<Record<string, ResolvedStackUser | null>> {
+  const uniqueEmailsByKey = new Map<string, string>();
+
+  for (const email of emails) {
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      continue;
+    }
+
+    const emailKey = normalizeKey(normalizedEmail);
+    if (!uniqueEmailsByKey.has(emailKey)) {
+      uniqueEmailsByKey.set(emailKey, normalizedEmail);
+    }
+  }
+
+  const resolvedUsers: Record<string, ResolvedStackUser | null> = {};
+
+  await Promise.all(
+    [...uniqueEmailsByKey.entries()].map(async ([emailKey, email]) => {
+      const user = await client.getUserByEmail(email);
+      resolvedUsers[emailKey] =
+        user === null
+          ? null
+          : {
+              id: user.id,
+              email: user.email ?? email,
+              name: user.name,
+            };
+    }),
+  );
+
+  return resolvedUsers;
+}
+
+function normalizeExistingGroups(groups: UserGroupSyncClientGroup[]): ExistingUserGroup[] {
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    users: group.users ?? [],
+  }));
+}
+
+function normalizeKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
