@@ -192,7 +192,12 @@ async function resolveUsersByEmail(
 
   await Promise.all(
     [...uniqueEmailsByKey.entries()].map(async ([emailKey, email]) => {
-      const user = await client.getUserByEmail(email);
+      let user: UserGroupSyncClientUser | null;
+      try {
+        user = await client.getUserByEmail(email);
+      } catch {
+        user = null;
+      }
       resolvedUsers[emailKey] =
         user === null
           ? null
