@@ -216,4 +216,19 @@ describe("StackApiV3Client", () => {
       }),
     );
   });
+
+  it("throws Stack API v3 errors when removing a group member fails", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ title: "Forbidden" }), {
+        status: 403,
+      }),
+    );
+    const client = new StackApiV3Client({
+      apiV3Url: "https://demo.stackenterprise.co/api/v3",
+      token: "token",
+      fetchFn: fetchMock,
+    });
+
+    await expect(client.removeUserGroupMember(7, 3)).rejects.toThrow(/Stack API v3 request failed with 403/);
+  });
 });
