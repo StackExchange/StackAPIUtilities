@@ -4,6 +4,7 @@ import type { PeriodScope, ReportId, ReportRunScope, RunPeriodRole } from "../do
 import { DataTable } from "./DataTable";
 import { ReportDashboard } from "./ReportDashboard";
 import { ReportScopePanel } from "./ReportScopePanel";
+import { StackOverflowLogo } from "./StackOverflowLogo";
 
 export interface ReportWorkspaceProps {
   reportId: ReportId;
@@ -43,11 +44,7 @@ export function ReportWorkspace({
             {report.title}
           </h2>
         </div>
-        <div className="workspace-stack-mark" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
+        <StackOverflowLogo className="workspace-stack-mark" variant="glyph" />
       </div>
       <p className="workspace-copy">{report.description}</p>
       <div className="workspace-readiness" role="note">

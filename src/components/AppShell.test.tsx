@@ -58,6 +58,10 @@ describe("AppShell", () => {
 
     await user.click(screen.getByRole("button", { name: "Write Tools" }));
 
+    expect(screen.getByRole("heading", { name: "Write Tools" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "User Group Sync" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("heading", { name: "Report Catalog" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tag Report" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "User Group Sync" })).toBeInTheDocument();
     expect(screen.getByLabelText("Upload user export CSV")).toBeInTheDocument();
   });
