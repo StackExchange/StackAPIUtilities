@@ -1,0 +1,42 @@
+{
+  "name": "stack-api-utilities",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "lint": "tsc -p tsconfig.json --noEmit --pretty false && tsc -p tsconfig.node.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@stackoverflow/stacks": "^2.5.1",
+    "@tanstack/react-table": "^8.20.5",
+    "d3-chord": "^3.0.1",
+    "d3-shape": "^3.2.0",
+    "papaparse": "^5.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0",
+    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/d3-chord": "^3.0.6",
+    "@types/d3-shape": "^3.1.6",
+    "@types/papaparse": "^5.3.14",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^24.1.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.5"
+  }
+}
