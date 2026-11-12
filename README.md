@@ -346,3 +346,7 @@ Run the production server:
 ```bash
 pnpm preview
 ```
+
+## License
+
+Released under the [MIT License](LICENSE).
