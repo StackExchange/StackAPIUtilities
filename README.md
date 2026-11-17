@@ -363,6 +363,19 @@ docker run --rm -p 3000:3000 \
 - `GET /api/healthz` returns `{"ok":true}` for liveness and readiness probes.
 - The image runs with a read-only root filesystem if `/tmp` and `/app/.next/cache` are writable mounts.
 
+### Outbound request guard
+
+The API routes call the Stack site a user enters from the server. To keep a publicly reachable deployment from being used to reach hosts that are only routable from where it runs, every server-side request is restricted to public internet addresses (`src/server/egressGuard.ts`, installed at startup by `src/instrumentation.ts`):
+
+- Refused before resolving: `localhost`, single-label names, and `*.local`, `*.localhost`, `*.internal`, `*.svc`, `*.int.stackoverflow.net`.
+- Refused after resolving, if any answer is private or reserved: RFC 1918, loopback, link-local and cloud metadata (`169.254.0.0/16`), CGNAT (`100.64.0.0/10`), IPv6 unique-local, link-local and NAT64, multicast, and documentation ranges. IP-literal targets and the socket's actual remote address are checked too, so DNS rebinding is covered.
+- Stack sites on the public internet, including Enterprise custom domains, are unaffected.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STACK_API_UTILITIES_ALLOW_PRIVATE_EGRESS` | unset | Set to `true` to disable the guard, for self-hosted deployments whose Stack site is on a private network. Never on a public deployment. |
+| `STACK_API_UTILITIES_EGRESS_DENY_SUFFIXES` | unset | Extra comma-separated hostname suffixes to refuse, e.g. `.corp.example.com`. |
+
 ## License
 
 Released under the [MIT License](LICENSE).
