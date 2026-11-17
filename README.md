@@ -347,6 +347,22 @@ Run the production server:
 pnpm preview
 ```
 
+## Container Image
+
+The repository ships a production `Dockerfile` that builds the Next.js standalone server on Node 24 and runs it as a non-root user (uid 10001) on port 3000.
+
+```bash
+docker build -t stack-api-utilities .
+docker run --rm -p 3000:3000 \
+  -e STACK_API_UTILITIES_PUBLIC_ORIGIN=http://localhost:3000 \
+  stack-api-utilities
+```
+
+- The server is stateless. Credentials and datasets stay in the browser, and OAuth PKCE state travels in a short-lived cookie, so the container needs no secrets or volumes.
+- Set `STACK_API_UTILITIES_PUBLIC_ORIGIN` to the public HTTPS origin when the app runs behind a TLS-terminating proxy, so the OAuth callback URL is correct.
+- `GET /api/healthz` returns `{"ok":true}` for liveness and readiness probes.
+- The image runs with a read-only root filesystem if `/tmp` and `/app/.next/cache` are writable mounts.
+
 ## License
 
 Released under the [MIT License](LICENSE).
